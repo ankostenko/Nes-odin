@@ -19,8 +19,8 @@ WINDOW_WIDTH : i32 : 480
 Error :: enum {
     None
     InvalidArguments
-    CartDoesNotExist
-    ErrorLoadingCart
+    FileDoesntExist
+    ErrorLoadingROM
 }
 
 Mirroring :: enum u8 {
@@ -35,7 +35,7 @@ RawBytesWithCursor :: struct {
 }
 
 // NES ROM
-ROM :: struct {
+Cart :: struct {
     pgr_rom: u8
     chr_rom: u8
     mirroring: Mirroring
@@ -45,70 +45,96 @@ ROM :: struct {
 }
 
 // NES cart
-Cart :: distinct RawBytesWithCursor
+ROM :: distinct RawBytesWithCursor
 
 // Stop the game flag
 stop_the_game: bool = false
 
-// Load cart from file into memory
-load_cart :: proc(path: string) -> ([]byte, Error) {
+// Load ROM from file into memory
+load_rom :: proc(path: string) -> (ROM, Error) {
     f, err := os.open(path)
     if err != 0 {
-        fmt.println("Error: could not open cart")
-        return nil, .ErrorLoadingCart
+        fmt.println("Error: could not open ROM")
+        return {}, .ErrorLoadingROM
     }
     defer os.close(f)
 
-    // Read the cart into memory
-    cart, success := os.read_entire_file_from_handle(f)
+    // Read the ROM into memory
+    rom_data, success := os.read_entire_file_from_handle(f)
 
-    // Check that the cart was read successfully
+    // Check that the ROM was read successfully
     if !success {
-        fmt.println("Error: could not read cart")
-        return nil, .ErrorLoadingCart
+        fmt.println("Error: could not read ROM")
+        return {}, .ErrorLoadingROM
     }
 
-    return cart, .None
+    return {rom_data, 0}, .None
 }
 
 // Check arguments
-// @return Error code
 check_arguments :: proc() -> Error {
-    // Check that a cart was specified
+    // Check that a ROM was specified
     if len(os.args) < 2 {
-        fmt.println("Usage: nes <cart>")
+        fmt.println("Usage: nes <ROM>")
         return .InvalidArguments
     }
 
-    // Check that the cart exists
+    // Check that the ROM exists
     if !os.exists(os.args[1]) {
-        fmt.println("Error: cart does not exist")
-        return .CartDoesNotExist
+        fmt.println("Error: ROM does not exist")
+        return .FileDoesntExist
     }
 
     return .None
 }
 
+// Read one byte
+read_one_byte :: proc {
+    read_one_byte_cart,
+    read_one_byte_rom
+}
+
 // Pop one byte from the cart
-read_one_byte :: proc(cart: ^Cart) -> byte {
-    result := cart.data[cart.cursor:cart.cursor+1][0]
-    cart.cursor += 1
+read_one_byte_cart :: proc(cart: ^Cart) -> byte {
+    cursor := cart.raw_data.cursor
+    result := cart.raw_data.data[cursor:cursor+1][0]
+    cart.raw_data.cursor += 1
     return result
 }
 
-read_rom :: proc(cart: ^Cart) -> ROM {
+read_one_byte_rom :: proc(rom: ^ROM) -> byte {
+    cursor := rom.cursor
+    result := rom.data[cursor:cursor+1][0]
+    rom.cursor += 1
+    return result
+}
+
+skip_bytes :: proc {
+    skip_bytes_cart,
+    skip_bytes_rom
+}
+
+skip_bytes_cart :: proc(cart: ^Cart, n: u64) {
+    cart.raw_data.cursor += n
+}
+
+skip_bytes_rom :: proc(rom: ^ROM, n: u64) {
+    rom.cursor += n
+}
+
+read_rom :: proc(rom: ^ROM) -> Cart {
     // Read header
-    assert(len(cart.data) >= 16, "Invalid ROM header: not enough bytes")
-    assert(read_one_byte(cart) == 0x4E, "Invalid ROM header: first byte is not N")
-    assert(read_one_byte(cart) == 0x45, "Invalid ROM header: second byte is not E")
-    assert(read_one_byte(cart) == 0x53, "Invalid ROM header: third byte is not S")
-    assert(read_one_byte(cart) == 0x1A, "Invalid ROM header: fourth byte is not 0x1A")
+    assert(len(rom.data) >= 16, "Invalid ROM header: not enough bytes")
+    assert(read_one_byte(rom) == 0x4E, "Invalid ROM header: first byte is not N")
+    assert(read_one_byte(rom) == 0x45, "Invalid ROM header: second byte is not E")
+    assert(read_one_byte(rom) == 0x53, "Invalid ROM header: third byte is not S")
+    assert(read_one_byte(rom) == 0x1A, "Invalid ROM header: fourth byte is not 0x1A")
 
-    pgr_rom := read_one_byte(cart)
-    chr_rom := read_one_byte(cart)
+    pgr_rom := read_one_byte(rom)
+    chr_rom := read_one_byte(rom)
 
-    flags_6 := read_one_byte(cart)
-    flags_7 := read_one_byte(cart)
+    flags_6 := read_one_byte(rom)
+    flags_7 := read_one_byte(rom)
 
     // Detect type of mirroring
     mirroring: Mirroring = .Vertical if flags_6 & 0x01 == 0x01 else .Horizontal
@@ -120,13 +146,13 @@ read_rom :: proc(cart: ^Cart) -> ROM {
     // and higher 4 bits 7 that goes to higher bits of mapper)
     mapper := flags_6 >> 4 | flags_7 & 0xF0
 
-    return ROM{
+    return Cart{
         pgr_rom=pgr_rom,
         chr_rom=chr_rom,
         mirroring=mirroring,
         battery_present=battery_present,
         mapper=mapper,
-        raw_data=RawBytesWithCursor{cart.data, 16}
+        raw_data=RawBytesWithCursor{rom.data, 16}
     }
 }
 
@@ -136,17 +162,16 @@ main :: proc() {
         return
     }
     
-    // Load cart and initialize it with data
-    data, err := load_cart(os.args[1])
+    // Load ROM
+    rom, err := load_rom(os.args[1])
     if err != .None {
         return
     }
-    cart: Cart = Cart{data, 0}
 
-    // Read ROM and parse it
-    rom := read_rom(&cart)
+    // Read ROM and return cart
+    cart := read_rom(&rom)
 
-    fmt.println("ROM:", rom)
+    fmt.println("Cart:", cart)
 
     // Ignore for now
 

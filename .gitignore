@@ -6,3 +6,4 @@ _test.odin
 out/
 .vscode
 testroms/
+ols.json

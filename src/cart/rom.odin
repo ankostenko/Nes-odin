@@ -61,12 +61,30 @@ read_rom :: proc(rom: ^ROM) -> Cart {
     // and higher 4 bits 7 that goes to higher bits of mapper)
     mapper := flags_6 >> 4 | flags_7 & 0xF0
 
+    // Skip 8 bytes
+    _ = read_bytes(rom, 8)
+
+    // Allocate memory for the pages of the program
+    prg_rom_pages: [][]byte = make([][]byte, pgr_rom)
+    for page in 0..<pgr_rom {
+        // Read pages of 16KB
+        prg_rom_pages[page] = read_bytes(rom, 16 * 1024)
+    }
+
+    // Allocate memory for the pages of the character
+    chr_rom_pages: [][]byte = make([][]byte, chr_rom)
+    for page in 0..<chr_rom {
+        // Read pages of 8KB
+        chr_rom_pages[page] = read_bytes(rom, 8 * 1024)
+    }
+
     return Cart{
         pgr_rom=pgr_rom,
         chr_rom=chr_rom,
         mirroring=mirroring,
         battery_present=battery_present,
         mapper=mapper,
-        raw_data=helpers.RawBytesWithCursor{rom.data, 16}
+        prg_rom_pages=prg_rom_pages,
+        chr_rom_pages=chr_rom_pages,
     }
 }

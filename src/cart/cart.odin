@@ -14,6 +14,7 @@ Cart :: struct {
     mirroring: Mirroring
     battery_present: bool
     mapper: u8
-    raw_data: helpers.RawBytesWithCursor
+    prg_rom_pages: [][]byte
+    chr_rom_pages: [][]byte
 }
 

@@ -1,0 +1,8 @@
+*.exe
+*.pdb
+*.dll
+_test.odin
+*.rdbg
+out/
+.vscode
+testroms/

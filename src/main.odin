@@ -6,10 +6,6 @@ import "core:fmt"
 import "core:strings"
 import "core:os"
 
-// Our own imports
-import "nes:cart"
-import "nes:helpers"
-
 // Vendor imports
 import sdl "vendor:sdl2"
 
@@ -28,18 +24,18 @@ stop_the_game: bool = false
 
 main :: proc() {
     // Check arguments
-    if helpers.check_arguments() != .None {
+    if check_arguments() != .None {
         return
     }
     
-    // Load ROM
-    rom, err := cart.load_rom(os.args[1])
+    // Load ROM data
+    rom_bytes, err := load_rom_data(os.args[1])
     if err != .None {
         return
     }
 
     // Read ROM and return cart
-    cart_instance := cart.read_rom(&rom)
+    cart_instance := read_rom(rom_bytes)
 
     fmt.println("Cart:", cart_instance)
 

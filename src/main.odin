@@ -27,10 +27,12 @@ main :: proc() {
 
     system := init_system()
     cpu := init_cpu(system)
+    dump_cpu(cpu)
 
     // fmt.println("", system)
     cpu.system.cart = Cart{}
     cpu = op_lda(cpu, 0xA9)
+    dump_cpu(cpu)
 
     // Ignore for now
 

@@ -1,16 +1,30 @@
 package main
 
+import "core:os"
+
+// Result size is 56 bytes
 System :: struct {
     scratch_ram: []u8
     ppu: PPU
     apu: APU
+    cart: Cart
 }
 
 init_system :: proc() -> System {
+    // Load ROM data
+    rom_bytes, err := load_rom_data(os.args[1])
+    if err != .None {
+        return {}
+    }
+
+    // Read ROM and return cart
+    cart_instance := read_rom(rom_bytes)
+
     return System{
         scratch_ram=make([]u8, 0x800),
         ppu=init_ppu(),
         apu=init_apu(),
+        cart=cart_instance,
     }
 }
 
@@ -21,7 +35,11 @@ mapper_read_byte :: proc(using system: System, address: u16) -> byte {
 mapper_write_byte :: proc(using system: System, address: u16, value: u8) {
 }
 
-read_byte :: proc(using system: System, address: u16) -> byte {
+system_read_word :: proc(using system: System, address: u16) -> u16 {
+    return (cast(u16)system_read_byte(system, address)) | ((cast(u16)system_read_byte(system, address + 1)) << 8)
+}
+
+system_read_byte :: proc(using system: System, address: u16) -> byte {
     // We're in the scratch RAM
     if address < 0x2000 {
         // Up until 0x7FF, it's mirrored every 0x800 bytes (0x800, 0x1000, etc). 
@@ -40,7 +58,7 @@ read_byte :: proc(using system: System, address: u16) -> byte {
     return 0
 }
 
-write_byte :: proc(using system: System, address: u16, value: u8) {
+system_write_byte :: proc(using system: System, address: u16, value: u8) {
     // We're in the scratch RAM
     if address < 0x2000 {
         scratch_ram[address & 0x7FF] = value

@@ -1,10 +1,7 @@
 package main
 
 // Core imports
-import "core:log"
 import "core:fmt"
-import "core:strings"
-import "core:os"
 
 // Vendor imports
 import sdl "vendor:sdl2"
@@ -27,17 +24,13 @@ main :: proc() {
     if check_arguments() != .None {
         return
     }
-    
-    // Load ROM data
-    rom_bytes, err := load_rom_data(os.args[1])
-    if err != .None {
-        return
-    }
 
-    // Read ROM and return cart
-    cart_instance := read_rom(rom_bytes)
+    system := init_system()
+    cpu := init_cpu(system)
 
-    fmt.println("Cart:", cart_instance)
+    // fmt.println("", system)
+    cpu.system.cart = Cart{}
+    cpu = op_lda(cpu, 0xA9)
 
     // Ignore for now
 

@@ -9,6 +9,7 @@ Mirroring :: enum u8 {
 }
 
 // NES cartridge
+// The size of this struct is 40 bytes
 Cart :: struct {
     pgr_rom: u8
     chr_rom: u8
@@ -23,7 +24,7 @@ Cart :: struct {
 load_rom_data :: proc(path: string) -> (RawBytesWithCursor, Error) {
     f, err := os.open(path)
     if err != 0 {
-        fmt.println("Error: could not open ROM")
+        fmt.eprintln("Error: could not open ROM")
         return {}, .ErrorLoadingROM
     }
     defer os.close(f)
@@ -33,7 +34,7 @@ load_rom_data :: proc(path: string) -> (RawBytesWithCursor, Error) {
 
     // Check that the ROM was read successfully
     if !success {
-        fmt.println("Error: could not read ROM")
+        fmt.eprintln("Error: could not read ROM")
         return {}, .ErrorLoadingROM
     }
 

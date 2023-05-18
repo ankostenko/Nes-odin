@@ -62,97 +62,315 @@ dump_cpu :: proc(using cpu: CPU) {
     fmt.println()
 }
 
-op_lda :: proc(using cpu: CPU, operand: u8) -> CPU {
-    cpu := cpu
-    
-    _is_page_boundary_crossed := proc(address: u16, offset: u8) -> bool {
-        return (address & 0xff00) != ((address + u16(offset)) & 0xff00)
-    }
+_is_page_boundary_crossed :: proc(address: u16, offset: u8) -> bool {
+    return (address & 0xff00) != ((address + u16(offset)) & 0xff00)
+}
 
-    intermidiate: u8 = 0
-    switch operand {
+op_lda :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    intermediate: u8 = 0
+    arg_address := pc + 1 // address of the opcode argument
+    switch opcode {
         case 0xA9: // immediate
             cpu.clock += 2
-            
-            intermidiate = system_read_byte(system, pc + 1)
-
             cpu.pc += 2
+            
+            intermediate = system_read_byte(system, arg_address)
         case 0xA5: // zero page
             cpu.clock += 3
-            
-            address := system_read_byte(system, pc + 1)
-            intermidiate = system_read_byte(system, u16(address))
-
             cpu.pc += 2
+            
+            address := system_read_byte(system, arg_address)
+            intermediate = system_read_byte(system, u16(address))
         case 0xB5: // zero page, x
             cpu.clock += 4
-            
-            address := system_read_byte(system, pc + 1)
-            intermidiate = system_read_byte(system, u16(address + x))
-
             cpu.pc += 2
+            
+            address := system_read_byte(system, arg_address)
+            intermediate = system_read_byte(system, u16(address + x))
         case 0xA1: // indirect zero page, x
             cpu.clock += 6
+            cpu.pc += 2
 
-            address := u16(system_read_byte(system, pc + 1) + x)
+            address := u16(system_read_byte(system, arg_address) + x)
             new_address := system_read_word(system, address)
 
-            intermidiate = system_read_byte(system, new_address)
-
-            cpu.pc += 2
+            intermediate = system_read_byte(system, new_address)
         case 0xB1: // indirect zero page, y
             cpu.clock += 5
+            cpu.pc += 2
 
-            address := system_read_byte(system, pc + 1)
+            address := system_read_byte(system, arg_address)
             new_address := system_read_word(system, u16(address + y))
 
             if _is_page_boundary_crossed(new_address, y) {
                 cpu.clock += 1
             }
 
-            intermidiate = system_read_byte(system, new_address)
-
-            cpu.pc += 2
+            intermediate = system_read_byte(system, new_address)
         case 0xAD: // absolute
             cpu.clock += 4
-
-            address := system_read_word(system, pc + 1)
-            intermidiate = system_read_byte(system, address)
-
             cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            intermediate = system_read_byte(system, address)
         case 0xBD: // absolute, x
             cpu.clock += 4
+            cpu.pc += 3
 
-            address := system_read_word(system, pc + 1)
+            address := system_read_word(system, arg_address)
 
             if _is_page_boundary_crossed(address, x) {
                 cpu.clock += 1
             }
 
-            intermidiate = system_read_byte(system, address + u16(x))
-
-            cpu.pc += 3
+            intermediate = system_read_byte(system, address + u16(x))
         case 0xB9: // absolute, y
             cpu.clock += 4
+            cpu.pc += 3
 
-            address := system_read_word(system, pc + 1)
+            address := system_read_word(system, arg_address)
             
             if _is_page_boundary_crossed(address, y) {
                 cpu.clock += 1
             }
 
-            intermidiate = system_read_byte(system, address + u16(y))
-
-            cpu.pc += 3
+            intermediate = system_read_byte(system, address + u16(y))
         case:
             panic("Unknown opcode")
     }
 
     // set flags
-    cpu.negative = intermidiate & 0x80 == 0x80
-    cpu.zero = intermidiate == 0
+    cpu.negative = intermediate & 0x80 == 0x80
+    cpu.zero = intermediate == 0
 
-    cpu.a = intermidiate
+    cpu.a = intermediate
+
+    return cpu
+}
+
+op_ldx :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    intermediate: u8 = 0
+    arg_address := pc + 1 // address of the opcode argument
+    switch opcode {
+        case 0xA2: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = system_read_byte(system, arg_address)
+        case 0xA6: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            intermediate = system_read_byte(system, u16(address))
+        case 0xB6: // zero page, y
+            cpu.clock += 4
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            intermediate = system_read_byte(system, u16(address + y))
+        case 0xAE: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            intermediate = system_read_byte(system, address)
+        case 0xBE: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+
+            if _is_page_boundary_crossed(address, y) {
+                cpu.clock += 1
+            }
+
+            intermediate = system_read_byte(system, address + u16(y))
+        case:
+                panic("Unknown opcode")
+    }
+
+    // set flags
+    cpu.negative = intermediate & 0x80 == 0x80
+    cpu.zero = intermediate == 0
+
+    cpu.x = intermediate
+
+    return cpu
+}
+
+op_ldy :: proc (using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    intermediate: u8 = 0
+    arg_address := pc + 1 // address of the opcode argument
+    switch opcode {
+        case 0xA0: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = system_read_byte(system, arg_address)
+        case 0xA4: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            intermediate = system_read_byte(system, u16(address))
+        case 0xB4: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            intermediate = system_read_byte(system, u16(address + x))
+        case 0xAC: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            intermediate = system_read_byte(system, address)
+        case 0xBC: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+
+            if _is_page_boundary_crossed(address, x) {
+                cpu.clock += 1
+            }
+
+            intermediate = system_read_byte(system, address + u16(x))
+        case:
+                panic("Unknown opcode")
+    }
+
+    // set flags
+    cpu.negative = intermediate & 0x80 == 0x80
+    cpu.zero = intermediate == 0
+
+    cpu.y = intermediate
+
+    return cpu
+}
+
+op_sta :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    switch opcode {
+        case 0x85: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            system_write_byte(system, u16(address), a)
+        case 0x95: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address) // Get the zero page address
+            system_write_byte(system, u16(address + x), a)
+        case 0x8D: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            system_write_byte(system, address, a)
+        case 0x9D: // absolute, x
+            cpu.clock += 5
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            system_write_byte(system, address + u16(x), a)
+        case 0x99: // absolute, y
+            cpu.clock += 5
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            system_write_byte(system, address + u16(y), a)
+        case 0x81: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            zp_address := system_read_byte(system, arg_address)
+            address := system_read_word(system, u16(zp_address + x)) // Get the address from the zero page address + x
+            system_write_byte(system, address, a)
+        case 0x91: // indirect zero page, y
+            cpu.clock += 6
+            cpu.pc += 2
+            
+            zp_address := system_read_byte(system, arg_address)
+            address := system_read_word(system, u16(zp_address)) // Get the address from the zero page address
+            system_write_byte(system, address + u16(y), a)
+        case:
+            panic("Unknown opcode")
+    }
+
+    return cpu
+}
+
+op_stx :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    switch opcode {
+        case 0x86: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            system_write_byte(system, u16(address), x)
+        case 0x96: // zero page, y
+            cpu.clock += 4
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address) // Get the zero page address
+            system_write_byte(system, u16(address + y), x)
+        case 0x8E: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            system_write_byte(system, address, x)
+        case:
+            panic("Unknown opcode")
+    }
+
+    return cpu
+}
+
+op_sty :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    switch opcode {
+        case 0x84: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address)
+            system_write_byte(system, u16(address), y)
+        case 0x94: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+
+            address := system_read_byte(system, arg_address) // Get the zero page address
+            system_write_byte(system, u16(address + x), y)
+        case 0x8C: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+
+            address := system_read_word(system, arg_address)
+            system_write_byte(system, address, y)
+        case:
+            panic("Unknown opcode")
+    }
 
     return cpu
 }

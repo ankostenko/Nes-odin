@@ -46,7 +46,7 @@ init_cpu :: proc(system: System) -> CPU {
 }
 
 dump_cpu :: proc(using cpu: CPU) {
-    fmt.printf("a: %X, x: %X, y: %X, s: %X, pc: %X | flags: ", cpu.a, cpu.x, cpu.y, cpu.s, cpu.pc)
+    fmt.printf("a: %X, x: %X, y: %X, s: %X, pc: %X, clock: %d | flags: ", a, x, y, s, pc, clock)
     
     cpu_type_id := typeid_of(CPU)
     types := reflect.struct_field_types(cpu_type_id)
@@ -65,11 +65,85 @@ dump_cpu :: proc(using cpu: CPU) {
 op_lda :: proc(using cpu: CPU, operand: u8) -> CPU {
     cpu := cpu
     
+    _is_page_boundary_crossed := proc(address: u16, offset: u8) -> bool {
+        return (address & 0xff00) != ((address + u16(offset)) & 0xff00)
+    }
+
     intermidiate: u8 = 0
     switch operand {
         case 0xA9: // immediate
-            intermidiate = system_read_byte(system, pc + 1)
             cpu.clock += 2
+            
+            intermidiate = system_read_byte(system, pc + 1)
+
+            cpu.pc += 2
+        case 0xA5: // zero page
+            cpu.clock += 3
+            
+            address := system_read_byte(system, pc + 1)
+            intermidiate = system_read_byte(system, u16(address))
+
+            cpu.pc += 2
+        case 0xB5: // zero page, x
+            cpu.clock += 4
+            
+            address := system_read_byte(system, pc + 1)
+            intermidiate = system_read_byte(system, u16(address + x))
+
+            cpu.pc += 2
+        case 0xA1: // indirect zero page, x
+            cpu.clock += 6
+
+            address := u16(system_read_byte(system, pc + 1) + x)
+            new_address := system_read_word(system, address)
+
+            intermidiate = system_read_byte(system, new_address)
+
+            cpu.pc += 2
+        case 0xB1: // indirect zero page, y
+            cpu.clock += 5
+
+            address := system_read_byte(system, pc + 1)
+            new_address := system_read_word(system, u16(address + y))
+
+            if _is_page_boundary_crossed(new_address, y) {
+                cpu.clock += 1
+            }
+
+            intermidiate = system_read_byte(system, new_address)
+
+            cpu.pc += 2
+        case 0xAD: // absolute
+            cpu.clock += 4
+
+            address := system_read_word(system, pc + 1)
+            intermidiate = system_read_byte(system, address)
+
+            cpu.pc += 3
+        case 0xBD: // absolute, x
+            cpu.clock += 4
+
+            address := system_read_word(system, pc + 1)
+
+            if _is_page_boundary_crossed(address, x) {
+                cpu.clock += 1
+            }
+
+            intermidiate = system_read_byte(system, address + u16(x))
+
+            cpu.pc += 3
+        case 0xB9: // absolute, y
+            cpu.clock += 4
+
+            address := system_read_word(system, pc + 1)
+            
+            if _is_page_boundary_crossed(address, y) {
+                cpu.clock += 1
+            }
+
+            intermidiate = system_read_byte(system, address + u16(y))
+
+            cpu.pc += 3
         case:
             panic("Unknown opcode")
     }

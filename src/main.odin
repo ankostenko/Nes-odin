@@ -33,6 +33,10 @@ main :: proc() {
     cpu.system.cart = Cart{}
     cpu = op_lda(cpu, 0xA9)
     dump_cpu(cpu)
+    cpu = op_lda(cpu, 0xA5)
+    dump_cpu(cpu)
+    cpu = op_lda(cpu, 0xBD)
+    dump_cpu(cpu)
 
     // Ignore for now
 

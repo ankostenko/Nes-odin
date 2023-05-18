@@ -1,8 +1,9 @@
-package main
+package core
 
 import "core:fmt"
 import "core:reflect"
 import "core:strings"
+import "core:math"
 
 // Reset vector is hardwired to 0xfffc-0xfffd
 RESET_VECTOR_ADDR :: 0xfffc
@@ -64,8 +65,14 @@ dump_cpu :: proc(using cpu: CPU) {
     fmt.println()
 }
 
-_is_page_boundary_crossed :: proc(address: u16, offset: u8) -> bool {
+// Returns true if the page boundary is crossed when adding the offset to the address
+_is_page_boundary_crossed_offset :: proc(address: u16, offset: u8) -> bool {
     return (address & 0xff00) != ((address + u16(offset)) & 0xff00)
+}
+
+// Returns true if the page boundary is crossed comparing the two addresses
+_is_page_boundary_crossed :: proc(address: u16, new_address: u16) -> bool {
+    return (address & 0xff00) != (new_address & 0xff00)
 }
 
 op_lda :: proc(using cpu: CPU, opcode: u8) -> CPU {
@@ -106,7 +113,7 @@ op_lda :: proc(using cpu: CPU, opcode: u8) -> CPU {
             address := system_read_byte(system, arg_address)
             new_address := system_read_word(system, u16(address + y))
 
-            if _is_page_boundary_crossed(new_address, y) {
+            if _is_page_boundary_crossed_offset(new_address, y) {
                 cpu.clock += 1
             }
 
@@ -123,7 +130,7 @@ op_lda :: proc(using cpu: CPU, opcode: u8) -> CPU {
 
             address := system_read_word(system, arg_address)
 
-            if _is_page_boundary_crossed(address, x) {
+            if _is_page_boundary_crossed_offset(address, x) {
                 cpu.clock += 1
             }
 
@@ -134,7 +141,7 @@ op_lda :: proc(using cpu: CPU, opcode: u8) -> CPU {
 
             address := system_read_word(system, arg_address)
             
-            if _is_page_boundary_crossed(address, y) {
+            if _is_page_boundary_crossed_offset(address, y) {
                 cpu.clock += 1
             }
 
@@ -187,7 +194,7 @@ op_ldx :: proc(using cpu: CPU, opcode: u8) -> CPU {
 
             address := system_read_word(system, arg_address)
 
-            if _is_page_boundary_crossed(address, y) {
+            if _is_page_boundary_crossed_offset(address, y) {
                 cpu.clock += 1
             }
 
@@ -240,7 +247,7 @@ op_ldy :: proc (using cpu: CPU, opcode: u8) -> CPU {
 
             address := system_read_word(system, arg_address)
 
-            if _is_page_boundary_crossed(address, x) {
+            if _is_page_boundary_crossed_offset(address, x) {
                 cpu.clock += 1
             }
 
@@ -535,5 +542,36 @@ op_php :: proc(using cpu: CPU) -> CPU {
     system_write_byte(system, STACK_START_ADDR + u16(cpu.s), status_register_byte)
     cpu.s -= 1
 
+    return cpu
+}
+
+_calculate_address_for_jump :: proc(address: u16, offset: i8) -> u16 {
+    if offset < 0 {
+        return address - cast(u16)math.abs(offset)
+    } else {
+        return address + cast(u16)offset
+    }
+}
+
+// TODO: test this
+op_bpl :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 2
+
+    if !cpu.negative {
+        cpu.clock += 1 // penalty for taking the branch
+
+        arg_address := pc + 1 // address of the opcode argument
+        offset := cast(i8)system_read_byte(system, arg_address) // signed offset
+
+        new_address := _calculate_address_for_jump(pc, offset)
+        if _is_page_boundary_crossed(pc, new_address) {
+            cpu.clock += 1 // penalty for crossing a page boundary
+        }
+
+        cpu.pc = new_address
+    }
     return cpu
 }

@@ -1,4 +1,4 @@
-package main
+package core
 
 // Data with a cursor
 RawBytesWithCursor :: struct {

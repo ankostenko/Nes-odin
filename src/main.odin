@@ -2,6 +2,7 @@ package main
 
 // Core imports
 import "core:fmt"
+import "nes:core"
 
 // Vendor imports
 import sdl "vendor:sdl2"
@@ -20,6 +21,8 @@ WINDOW_WIDTH : i32 : 480
 stop_the_game: bool = false
 
 main :: proc() {
+    using core
+    
     // Check arguments
     if check_arguments() != .None {
         return

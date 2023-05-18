@@ -6,6 +6,8 @@ import "core:strings"
 
 // Reset vector is hardwired to 0xfffc-0xfffd
 RESET_VECTOR_ADDR :: 0xfffc
+STACK_START_ADDR :u16: 0x0100
+STACK_END_ADDR :u16: 0x01ff
 
 // Size of this structure is 80 bytes
 CPU :: struct {
@@ -371,6 +373,167 @@ op_sty :: proc(using cpu: CPU, opcode: u8) -> CPU {
         case:
             panic("Unknown opcode")
     }
+
+    return cpu
+}
+
+op_tax :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    // flags
+    cpu.negative = a & 0x80 == 0x80
+    cpu.zero = a == 0
+
+    cpu.x = a
+
+    return cpu
+}
+
+op_txa :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    // flags
+    cpu.negative = x & 0x80 == 0x80
+    cpu.zero = x == 0
+
+    cpu.a = x
+
+    return cpu
+}
+
+op_tay :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    // flags
+    cpu.negative = a & 0x80 == 0x80
+    cpu.zero = a == 0
+
+    cpu.y = a
+
+    return cpu
+}
+
+op_tya :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    // flags
+    cpu.negative = y & 0x80 == 0x80
+    cpu.zero = y == 0
+
+    cpu.a = y
+
+    return cpu
+}
+
+op_tsx :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    // flags
+    cpu.negative = s & 0x80 == 0x80
+    cpu.zero = s == 0
+
+    cpu.x = s
+
+    return cpu
+}
+
+op_txs :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    cpu.s = x
+
+    return cpu
+}
+
+op_pla :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 4
+    cpu.pc += 1
+    
+    cpu.s += 1
+
+    s_address := system_read_byte(system, STACK_START_ADDR + u16(cpu.s))
+    intermediate := system_read_byte(system, u16(s_address))
+
+    // flags
+    cpu.negative = intermediate & 0x80 == 0x80
+    cpu.zero = intermediate == 0
+
+    cpu.a = intermediate
+
+    return cpu
+}
+
+op_pha :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 3
+    cpu.pc += 1
+
+    system_write_byte(system, STACK_START_ADDR + u16(cpu.s), a)
+    cpu.s -= 1
+
+    return cpu
+}
+
+op_plp :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 4
+    cpu.pc += 1
+
+    cpu.s += 1
+    status_register_byte := system_read_byte(system, STACK_START_ADDR + u16(cpu.s))
+
+    // flags
+    cpu.carry     = status_register_byte & 0x01 == 0x01
+    cpu.zero      = status_register_byte & 0x02 == 0x02
+    cpu.interrupt = status_register_byte & 0x04 == 0x04
+    cpu.decimal   = status_register_byte & 0x08 == 0x08
+    cpu.overflow  = status_register_byte & 0x40 == 0x40
+    cpu.negative  = status_register_byte & 0x80 == 0x80
+
+    return cpu
+}
+
+op_php :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 3
+    cpu.pc += 1
+
+    status_register_byte: u8 = 0
+
+    status_register_byte |= 0x01 if cpu.carry      else 0
+    status_register_byte |= 0x02 if cpu.zero       else 0
+    status_register_byte |= 0x04 if cpu.interrupt  else 0
+    status_register_byte |= 0x08 if cpu.decimal    else 0
+    status_register_byte |= 0x10 if cpu.break_flag else 0
+    status_register_byte |= 0x20 // unused, always 1
+    status_register_byte |= 0x40 if cpu.overflow   else 0
+    status_register_byte |= 0x80 if cpu.negative   else 0
+
+    system_write_byte(system, STACK_START_ADDR + u16(cpu.s), status_register_byte)
+    cpu.s -= 1
 
     return cpu
 }

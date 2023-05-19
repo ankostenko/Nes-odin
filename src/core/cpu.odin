@@ -554,24 +554,137 @@ _calculate_address_for_jump :: proc(address: u16, offset: i8) -> u16 {
 }
 
 // TODO: test this
+_take_branch :: proc(using cpu: CPU, arg_address: u16) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 1 // penalty for taking the branch
+
+    offset := cast(i8)system_read_byte(system, arg_address) // signed offset
+
+    new_address := _calculate_address_for_jump(pc, offset)
+    if _is_page_boundary_crossed(pc, new_address) {
+        cpu.clock += 1 // penalty for crossing a page boundary
+    }
+
+    cpu.pc = new_address
+
+    return cpu
+}
+
+// TODO: test this
 op_bpl :: proc(using cpu: CPU) -> CPU {
     cpu := cpu
 
+    arg_address := pc + 1 // address of the opcode argument
+
     cpu.clock += 2
-    cpu.pc += 2
 
     if !cpu.negative {
-        cpu.clock += 1 // penalty for taking the branch
-
-        arg_address := pc + 1 // address of the opcode argument
-        offset := cast(i8)system_read_byte(system, arg_address) // signed offset
-
-        new_address := _calculate_address_for_jump(pc, offset)
-        if _is_page_boundary_crossed(pc, new_address) {
-            cpu.clock += 1 // penalty for crossing a page boundary
-        }
-
-        cpu.pc = new_address
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
     }
+    return cpu
+}
+
+// TODO: test this
+op_bmi :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if cpu.negative {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
+    return cpu
+}
+
+op_bvc :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if !cpu.overflow {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
+    return cpu
+}
+
+op_bvs :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if cpu.overflow {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
+    return cpu
+}
+
+op_bcc :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if !cpu.carry {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
+    return cpu
+}
+
+// TODO: test this
+op_bcs :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if cpu.carry {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
+    return cpu
+}
+
+// TODO: test this
+op_bne :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if !cpu.zero {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
+    return cpu
+}
+
+// TODO: test this
+op_beq :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    if cpu.zero {
+        cpu = _take_branch(cpu, arg_address)
+    } else {
+        cpu.pc += 2
+    }
+
     return cpu
 }

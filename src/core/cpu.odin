@@ -9,6 +9,7 @@ import "core:math"
 RESET_VECTOR_ADDR :: 0xfffc
 STACK_START_ADDR :u16: 0x0100
 STACK_END_ADDR :u16: 0x01ff
+IRQ_VECTOR_ADDR :u16: 0xfffe
 
 // Size of this structure is 80 bytes
 CPU :: struct {
@@ -502,14 +503,11 @@ op_pha :: proc(using cpu: CPU) -> CPU {
     return cpu
 }
 
-op_plp :: proc(using cpu: CPU) -> CPU {
+_pull_status_register :: proc(using cpu: CPU) -> CPU {
     cpu := cpu
 
-    cpu.clock += 4
-    cpu.pc += 1
-
-    cpu.s += 1
-    status_register_byte := system_read_byte(system, STACK_START_ADDR + u16(cpu.s))
+    status_register_byte: byte
+    status_register_byte, cpu = _pull_byte_from_stack(cpu)
 
     // flags
     cpu.carry     = status_register_byte & 0x01 == 0x01
@@ -522,11 +520,56 @@ op_plp :: proc(using cpu: CPU) -> CPU {
     return cpu
 }
 
-op_php :: proc(using cpu: CPU) -> CPU {
+_pull_byte_from_stack :: proc(using cpu: CPU) -> (u8, CPU) {
     cpu := cpu
 
-    cpu.clock += 3
+    cpu.s += 1
+    value := system_read_byte(system, STACK_START_ADDR + u16(cpu.s))
+
+    return value, cpu
+}
+
+_pull_word_from_stack :: proc(using cpu: CPU) -> (u16, CPU) {
+    cpu := cpu
+
+    cpu.s += 1
+    value := system_read_word(system, STACK_START_ADDR + u16(cpu.s))
+    cpu.s += 1
+
+    return value, cpu
+}
+
+op_plp :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 4
     cpu.pc += 1
+
+    cpu = _pull_status_register(cpu)
+
+    return cpu
+}
+
+_push_byte_to_stack :: proc(using cpu: CPU, value: u8) -> CPU {
+    cpu := cpu
+
+    system_write_byte(system, STACK_START_ADDR + u16(cpu.s), value)
+    cpu.s -= 1
+
+    return cpu
+}
+
+_push_word_to_stack :: proc(using cpu: CPU, value: u16) -> CPU {
+    cpu := cpu
+
+    cpu = _push_byte_to_stack(cpu, cast(u8)(value >> 8))
+    cpu = _push_byte_to_stack(cpu, cast(u8)(value & 0xFF))
+
+    return cpu
+}
+
+_push_status_register :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
 
     status_register_byte: u8 = 0
 
@@ -539,8 +582,18 @@ op_php :: proc(using cpu: CPU) -> CPU {
     status_register_byte |= 0x40 if cpu.overflow   else 0
     status_register_byte |= 0x80 if cpu.negative   else 0
 
-    system_write_byte(system, STACK_START_ADDR + u16(cpu.s), status_register_byte)
-    cpu.s -= 1
+    cpu = _push_byte_to_stack(cpu, status_register_byte)
+
+    return cpu
+}
+
+op_php :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 3
+    cpu.pc += 1
+
+    cpu = _push_status_register(cpu)
 
     return cpu
 }
@@ -685,6 +738,222 @@ op_beq :: proc(using cpu: CPU) -> CPU {
     } else {
         cpu.pc += 2
     }
+
+    return cpu
+}
+
+// TODO: test this
+op_brk :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 7
+
+    // Push the PC to the stack
+    cpu = _push_word_to_stack(cpu, cpu.pc)
+
+    cpu = _push_status_register(cpu)
+
+    cpu.pc = system_read_word(system, IRQ_VECTOR_ADDR)
+
+    // set the break flag
+    cpu.break_flag = true
+    cpu.interrupt = true
+
+    return cpu
+}
+
+op_rti :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 6
+
+    // [| |P|PC1|PC2|X|X|X|]
+    //  s^
+    // Read the status register from the stack
+    // [| |P|PC1|PC2|X|X|X|]
+    //    s^
+    // Read the PC from the stack
+    // [| |P|PC1|PC2|X|X|X|]
+    //       s^
+    // Increment the stack pointer
+    // [| |P|PC1|PC2|X|X|X|]
+    //           s^
+    // We have to point to the first free byte on the stack
+
+    cpu = _pull_status_register(cpu)
+    pulled_pc: u16
+    pulled_pc, cpu = _pull_word_from_stack(cpu)
+    cpu.pc = pulled_pc
+
+    return cpu
+}
+
+op_jsr :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    arg_address := pc + 1 // address of the opcode argument
+
+    cpu.clock += 6
+
+    // Push the PC + 2 (the next operation) to the stack
+    cpu = _push_word_to_stack(cpu, cpu.pc + 2)
+
+    // Jump to the address, absolute addressing mode
+    cpu.pc = system_read_word(system, arg_address)
+
+    return cpu
+}
+
+op_rts :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 6
+
+    // Read the PC from the stack
+    pulled_pc: u16
+    pulled_pc, cpu = _pull_word_from_stack(cpu)
+    cpu.pc = pulled_pc
+
+    return cpu
+}
+
+op_jmp :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+
+    switch opcode {
+        case 0x4C: // JMP absolute
+            arg_address := pc + 1 // address of the opcode argument
+            cpu.pc = system_read_word(system, arg_address)
+            cpu.clock += 3
+        case 0x6C: // JMP indirect
+            arg_address := pc + 1 // address of the opcode argument
+            indirect_address := system_read_word(system, arg_address)
+            cpu.pc = system_read_word(system, indirect_address)
+            cpu.clock += 5
+        case:
+            panic("Unknown opcode")
+    }
+
+    cpu.pc += 3
+    
+    return cpu
+}
+
+op_bit :: proc(using cpu: CPU, opcode: u8) -> CPU {
+    cpu := cpu
+    
+    arg_address := pc + 1 // address of the opcode argument
+    value: u8
+
+    switch opcode {
+        case 0x24: // Zero page
+            address := system_read_byte(system, arg_address)
+            value = system_read_byte(system, cast(u16)address)
+
+            cpu.clock += 3
+            cpu.pc += 2
+        case 0x2C: // Absolute
+            address := system_read_word(system, arg_address)
+            value = system_read_byte(system, address)
+
+            cpu.clock += 4
+            cpu.pc += 3
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = (value & 0x80) != 0 // set the negative flag to the 7th bit of the memory
+    cpu.overflow = (value & 0x40) != 0 // set the overflow flag to the 6th bit of the memory
+    cpu.zero     = (value & a)    == 0 // set the zero flag to the result of the AND operation between the accumulator and the memory
+
+    return cpu
+}
+
+
+// Reset the carry flag
+op_clc :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.carry = false
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_sec :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.carry = true
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_cld :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.decimal = false
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_sed :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.decimal = true
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_cli :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.interrupt = false
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_sei :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.interrupt = true
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_clv :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.overflow = false
+
+    cpu.clock += 2
+    cpu.pc += 1
+
+    return cpu
+}
+
+op_nop :: proc(using cpu: CPU) -> CPU {
+    cpu := cpu
+
+    cpu.clock += 2
+    cpu.pc += 1
 
     return cpu
 }

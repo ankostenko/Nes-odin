@@ -82,42 +82,48 @@ am_imm :: proc(using cpu: ^CPU) -> u8 {
     return system_read_byte(system, argument_address)
 }
 
+
+am_zp_address :: proc(using cpu: ^CPU) -> u8 {
+    argument_address := pc + 1
+    return system_read_byte(system, argument_address)
+}
+
 // Zero page addressing mode
 am_zp :: proc(using cpu: ^CPU) -> u8 {
-    argument_address := pc + 1
-    address := system_read_byte(system, argument_address)
+    address := am_zp_address(cpu)
     return system_read_byte(system, u16(address))
 }
 
 // Zero page, x addressing mode
 am_zpx :: proc(using cpu: ^CPU) -> u8 {
-    argument_address := pc + 1
-    address := system_read_byte(system, argument_address)
+    address := am_zp_address(cpu)
     return system_read_byte(system, u16(address + x))
 }
 
 // Zero page, y addressing mode
 am_zpy :: proc(using cpu: ^CPU) -> u8 {
-    argument_address := pc + 1
-    address := system_read_byte(system, argument_address)
+    address := am_zp_address(cpu)
     return system_read_byte(system, u16(address + y))
+}
+
+am_abs_address :: proc(using cpu: ^CPU) -> u16 {
+    argument_address := pc + 1
+    return system_read_word(system, argument_address)
 }
 
 // Absolute addressing mode
 am_abs :: proc(using cpu: ^CPU) -> u8 {
-    argument_address := pc + 1
-    address := system_read_word(system, argument_address)
+    address := am_abs_address(cpu)
     return system_read_byte(system, address)
 }
 
 // Absolute, x addressing mode
 // NOTE: adds a cycle if the page boundary is crossed and add_cycle_on_cross_boundary is true
 am_absx :: proc(using cpu: ^CPU, add_cycle_on_cross_boundary: bool) -> u8 {
-    argument_address := pc + 1
-    address := system_read_word(system, argument_address)
+    address := am_abs_address(cpu)
     value := system_read_byte(system, address + u16(x))
 
-    if _is_page_boundary_crossed(address, address + u16(x)) && add_cycle_on_cross_boundary {
+    if add_cycle_on_cross_boundary && _is_page_boundary_crossed(address, address + u16(x)) {
         cpu.clock += 1
     }
 
@@ -127,11 +133,10 @@ am_absx :: proc(using cpu: ^CPU, add_cycle_on_cross_boundary: bool) -> u8 {
 // Absolute, y addressing mode
 // NOTE: adds a cycle if the page boundary is crossed and add_cycle_on_cross_boundary is true
 am_absy :: proc(using cpu: ^CPU, add_cycle_on_cross_boundary: bool) -> u8 {
-    argument_address := pc + 1
-    address := system_read_word(system, argument_address)
+    address := am_abs_address(cpu)
     value := system_read_byte(system, address + u16(y))
 
-    if _is_page_boundary_crossed(address, address + u16(y)) && add_cycle_on_cross_boundary {
+    if add_cycle_on_cross_boundary && _is_page_boundary_crossed(address, address + u16(y)) {
         cpu.clock += 1
     }
 
@@ -153,15 +158,812 @@ am_izy :: proc(using cpu: ^CPU, add_cycle_on_cross_boundary: bool) -> u8 {
     zp_address := system_read_byte(system, argument_address)
     new_address := system_read_word(system, u16(zp_address)) + u16(y)
 
-    if _is_page_boundary_crossed(new_address - u16(y), new_address) && add_cycle_on_cross_boundary {
+    if add_cycle_on_cross_boundary && _is_page_boundary_crossed(new_address - u16(y), new_address) {
         cpu.clock += 1
     }
 
     return system_read_byte(system, new_address)
 }
 
-op_ora :: proc(using cpu: ^CPU) {
+is_negative :: proc(value: u8) -> bool {
+    return (value & 0x80) != 0
+}
 
+is_zero :: proc(value: u8) -> bool {
+    return value == 0
+}
+
+// OR with accumulator
+op_ora :: proc(using cpu: ^CPU, opcode: u8) {
+    switch opcode {
+        case 0x09: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            cpu.a |= am_imm(cpu)
+        case 0x05: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            cpu.a |= am_zp(cpu)
+        case 0x15: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+            
+            cpu.a |= am_zpx(cpu)
+        case 0x01: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            cpu.a |= am_izx(cpu)
+        case 0x11: // indirect zero page, y
+            cpu.clock += 5
+            cpu.pc += 2
+
+            cpu.a |= am_izy(cpu, true)
+        case 0x0D: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a |= am_abs(cpu)
+        case 0x1D: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a |= am_absx(cpu, true)
+        case 0x19: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a |= am_absy(cpu, true)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(cpu.a)
+    cpu.zero = is_zero(cpu.a)
+}
+
+
+// AND - Logical AND with accumulator
+op_and :: proc(using cpu: ^CPU, opcode: u8) {
+    switch opcode {
+        case 0x29: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            cpu.a &= am_imm(cpu)
+        case 0x25: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            cpu.a &= am_zp(cpu)
+        case 0x35: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+            
+            cpu.a &= am_zpx(cpu)
+        case 0x21: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            cpu.a &= am_izx(cpu)
+        case 0x31: // indirect zero page, y
+            cpu.clock += 5
+            cpu.pc += 2
+
+            cpu.a &= am_izy(cpu, true)
+        case 0x2D: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a &= am_abs(cpu)
+        case 0x3D: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a &= am_absx(cpu, true)
+        case 0x39: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a &= am_absy(cpu, true)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(cpu.a)
+    cpu.zero = is_zero(cpu.a)
+}
+
+// XOR (exclusive or) memory with accumulator
+op_eor :: proc(using cpu: ^CPU, opcode: u8) {
+    switch opcode {
+        case 0x49: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            cpu.a ~= am_imm(cpu)
+        case 0x45: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            cpu.a ~= am_zp(cpu)
+        case 0x55: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+            
+            cpu.a ~= am_zpx(cpu)
+        case 0x41: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            cpu.a ~= am_izx(cpu)
+        case 0x51: // indirect zero page, y
+            cpu.clock += 5
+            cpu.pc += 2
+
+            cpu.a ~= am_izy(cpu, true)
+        case 0x4D: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a ~= am_abs(cpu)
+        case 0x5D: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a ~= am_absx(cpu, true)
+        case 0x59: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            cpu.a ~= am_absy(cpu, true)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(cpu.a)
+    cpu.zero = is_zero(cpu.a)
+}
+
+op_adc :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u16 = 0
+    switch opcode {
+        case 0x69: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = u16(cpu.a + am_imm(cpu) + 1 if cpu.carry else 0)
+        case 0x65: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            intermediate = u16(cpu.a + am_zp(cpu) + 1 if cpu.carry else 0)
+        case 0x75: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+            
+            intermediate = u16(cpu.a + am_zpx(cpu) + 1 if cpu.carry else 0)
+        case 0x61: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            intermediate = u16(cpu.a + am_izx(cpu) + 1 if cpu.carry else 0)
+        case 0x71: // indirect zero page, y
+            cpu.clock += 5
+            cpu.pc += 2
+
+            intermediate = u16(cpu.a + am_izy(cpu, true) + 1 if cpu.carry else 0)
+        case 0x6D: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = u16(cpu.a + am_abs(cpu) + 1 if cpu.carry else 0)
+        case 0x7D: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = u16(cpu.a + am_absx(cpu, true) + 1 if cpu.carry else 0)
+        case 0x79: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = u16(cpu.a + am_absy(cpu, true) + 1 if cpu.carry else 0)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+
+    cpu.carry = intermediate > 255 // The flag is reset if the result is in the range 0 to 255
+    // There's no notion of signed addition in 6502, so we have to convert to signed first
+    cpu.overflow = i16(intermediate) > 127 || i16(intermediate) < -128 // The flag is reset if the result is in the range -128 to 127
+
+    cpu.a = u8(intermediate)
+}
+
+op_sbc :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u16
+    switch opcode {
+        case 0xE9: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = u16(cpu.a - am_imm(cpu) - 1 if !cpu.carry else 0)
+        case 0xE5: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            intermediate = u16(cpu.a - am_zp(cpu) - 1 if !cpu.carry else 0)
+        case 0xF5: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+            
+            intermediate = u16(cpu.a - am_zpx(cpu) - 1 if !cpu.carry else 0)
+        case 0xE1: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            intermediate = u16(cpu.a - am_izx(cpu) - 1 if !cpu.carry else 0)
+        case 0xF1: // indirect zero page, y
+            cpu.clock += 5
+            cpu.pc += 2
+
+            intermediate = u16(cpu.a - am_izy(cpu, true) - 1 if !cpu.carry else 0)
+        case 0xED: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = u16(cpu.a - am_abs(cpu) - 1 if !cpu.carry else 0)
+        case 0xFD: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = u16(cpu.a - am_absx(cpu, true) - 1 if !cpu.carry else 0)
+        case 0xF9: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = u16(cpu.a - am_absy(cpu, true) - 1 if !cpu.carry else 0)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+    cpu.carry = intermediate >= 0
+    cpu.overflow = i16(intermediate) > 127 || i16(intermediate) < -128
+
+    cpu.a = u8(intermediate)
+}
+
+op_cmp :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: i16
+    switch opcode {
+        case 0xC9: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.a - am_imm(cpu))
+        case 0xC5: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.a - am_zp(cpu))
+        case 0xD5: // zero page, x
+            cpu.clock += 4
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.a - am_zpx(cpu))
+        case 0xC1: // indirect zero page, x
+            cpu.clock += 6
+            cpu.pc += 2
+
+            intermediate = i16(cpu.a - am_izx(cpu))
+        case 0xD1: // indirect zero page, y
+            cpu.clock += 5
+            cpu.pc += 2
+
+            intermediate = i16(cpu.a - am_izy(cpu, true))
+        case 0xCD: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = i16(cpu.a - am_abs(cpu))
+        case 0xDD: // absolute, x
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = i16(cpu.a - am_absx(cpu, true))
+        case 0xD9: // absolute, y
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = i16(cpu.a - am_absy(cpu, true))
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+    cpu.carry = i16(cpu.a) >= intermediate // TODO: Check this
+}
+
+op_cpx :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: i16
+    switch opcode {
+        case 0xE0: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.x - am_imm(cpu))
+        case 0xE4: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.x - am_zp(cpu))
+        case 0xEC: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = i16(cpu.x - am_abs(cpu))
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+    cpu.carry = i16(cpu.x) >= intermediate // TODO: Check this
+}
+
+op_cpy :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: i16
+    switch opcode {
+        case 0xC0: // immediate
+            cpu.clock += 2
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.y - am_imm(cpu))
+        case 0xC4: // zero page
+            cpu.clock += 3
+            cpu.pc += 2
+            
+            intermediate = i16(cpu.y - am_zp(cpu))
+        case 0xCC: // absolute
+            cpu.clock += 4
+            cpu.pc += 3
+            
+            intermediate = i16(cpu.y - am_abs(cpu))
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+    cpu.carry = i16(cpu.y) >= intermediate // TODO: Check this
+}
+
+op_dec :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u8
+    address: u16
+    switch opcode {
+        case 0xC6: // zero page
+            address = u16(am_zp_address(cpu))
+
+            cpu.clock += 5
+            cpu.pc += 2
+            
+            intermediate = u8(am_zp(cpu) - 1)
+        case 0xD6: // zero page, x
+            address = u16(am_zp_address(cpu))
+
+            cpu.clock += 6
+            cpu.pc += 2
+            
+            intermediate = u8(am_zpx(cpu) - 1)
+        case 0xCE: // absolute
+            address = am_abs_address(cpu)
+
+            cpu.clock += 6
+            cpu.pc += 3
+            
+            intermediate = u8(am_abs(cpu) - 1)
+        case 0xDE: // absolute, x
+            address = am_abs_address(cpu)
+
+            cpu.clock += 7
+            cpu.pc += 3
+            
+            intermediate = u8(am_absx(cpu, false) - 1)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(intermediate)
+    cpu.zero = is_zero(intermediate)
+
+    // Write to memory
+    system_write_byte(system, address, intermediate)
+}
+
+op_dex :: proc(using cpu: ^CPU) {
+    cpu.clock += 2
+    cpu.pc += 1
+
+    cpu.x -= 1
+
+    // Set flags
+    cpu.negative = is_negative(cpu.x)
+    cpu.zero = is_zero(cpu.x)
+}
+
+op_dey :: proc(using cpu: ^CPU) {
+    cpu.clock += 2
+    cpu.pc += 1
+
+    cpu.y -= 1
+
+    // Set flags
+    cpu.negative = is_negative(cpu.y)
+    cpu.zero = is_zero(cpu.y)
+}
+
+op_inc :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u8
+    address: u16
+    switch opcode {
+        case 0xE6: // zero page
+            address = u16(am_zp_address(cpu))
+
+            cpu.clock += 5
+            cpu.pc += 2
+            
+            intermediate = u8(am_zp(cpu) + 1)
+        case 0xF6: // zero page, x
+            address = u16(am_zp_address(cpu))
+
+            cpu.clock += 6
+            cpu.pc += 2
+            
+            intermediate = u8(am_zpx(cpu) + 1)
+        case 0xEE: // absolute
+            address = am_abs_address(cpu)
+
+            cpu.clock += 6
+            cpu.pc += 3
+            
+            intermediate = u8(am_abs(cpu) + 1)
+        case 0xFE: // absolute, x
+            address = am_abs_address(cpu)
+
+            cpu.clock += 7
+            cpu.pc += 3
+            
+            intermediate = u8(am_absx(cpu, false) + 1)
+        case:
+            panic("Unknown opcode")
+    }
+
+    cpu.negative = is_negative(intermediate)
+    cpu.zero = is_zero(intermediate)
+
+    // Write to memory
+    system_write_byte(system, address, intermediate)
+}
+
+op_inx :: proc(using cpu: ^CPU) {
+    cpu.clock += 2
+    cpu.pc += 1
+
+    cpu.x += 1
+
+    // Set flags
+    cpu.negative = is_negative(cpu.x)
+    cpu.zero = is_zero(cpu.x)
+}
+
+op_iny :: proc(using cpu: ^CPU) {
+    cpu.clock += 2
+    cpu.pc += 1
+
+    cpu.y += 1
+
+    // Set flags
+    cpu.negative = is_negative(cpu.y)
+    cpu.zero = is_zero(cpu.y)
+}
+
+// Arithmetic shift left
+op_asl :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u16
+    address: u16
+    switch opcode {
+        case 0x0A: // accumulator
+            cpu.clock += 2
+            cpu.pc += 1
+
+            intermediate = u16(cpu.a) << 1
+            cpu.a = u8(intermediate)
+        case 0x06: // zero page
+            address = u16(am_zp_address(cpu))
+
+            cpu.clock += 5
+            cpu.pc += 2
+            
+            intermediate = u16(am_zp(cpu)) << 1
+            system_write_byte(system, address, u8(intermediate))
+        case 0x16: // zero page, x
+            address = u16(am_zp_address(cpu))
+
+            cpu.clock += 6
+            cpu.pc += 2
+            
+            intermediate = u16(am_zpx(cpu)) << 1
+            system_write_byte(system, address, u8(intermediate))
+        case 0x0E: // absolute
+            address = am_abs_address(cpu)
+
+            cpu.clock += 6
+            cpu.pc += 3
+            
+            intermediate = u16(am_abs(cpu)) << 1
+            system_write_byte(system, address, u8(intermediate))
+        case 0x1E: // absolute, x
+            address = am_abs_address(cpu)
+
+            cpu.clock += 7
+            cpu.pc += 3
+            
+            intermediate = u16(am_absx(cpu, false)) << 1
+            system_write_byte(system, address, u8(intermediate))
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+    cpu.carry = intermediate > 255
+}
+
+// Rotate left
+op_rol :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u16
+    switch opcode {
+        case 0x2A: // accumulator
+            cpu.clock += 2
+            cpu.pc += 1
+
+            intermediate = u16(cpu.a) << 1
+            if cpu.carry {
+                intermediate |= 1
+            }
+            cpu.a = u8(intermediate)
+        case 0x26: // zero page
+            address := u16(am_zp_address(cpu))
+
+            cpu.clock += 5
+            cpu.pc += 2
+            
+            intermediate = u16(am_zp(cpu)) << 1
+            if cpu.carry {
+                intermediate |= 1
+            }
+            system_write_byte(system, address, u8(intermediate))
+        case 0x36: // zero page, x
+            address := u16(am_zp_address(cpu))
+
+            cpu.clock += 6
+            cpu.pc += 2
+            
+            intermediate = u16(am_zpx(cpu)) << 1
+            if cpu.carry {
+                intermediate |= 1
+            }
+            system_write_byte(system, address, u8(intermediate))
+        case 0x2E: // absolute
+            address := am_abs_address(cpu)
+
+            cpu.clock += 6
+            cpu.pc += 3
+            
+            intermediate = u16(am_abs(cpu)) << 1
+            if cpu.carry {
+                intermediate |= 1
+            }
+            system_write_byte(system, address, u8(intermediate))
+        case 0x3E: // absolute, x
+            address := am_abs_address(cpu)
+
+            cpu.clock += 7
+            cpu.pc += 3
+            
+            intermediate = u16(am_absx(cpu, false)) << 1
+            if cpu.carry {
+                intermediate |= 1
+            }
+            system_write_byte(system, address, u8(intermediate))
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
+    cpu.carry = intermediate > 255
+}
+
+// Logical shift right
+op_lsr :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u16
+
+    switch opcode {
+        case 0x4A: // accumulator
+            cpu.clock += 2
+            cpu.pc += 1
+
+            value := cpu.a
+
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = u16(value) >> 1
+            cpu.a = u8(intermediate)
+        case 0x46: // zero page
+            address := u16(am_zp_address(cpu))
+
+            cpu.clock += 5
+            cpu.pc += 2
+
+            value := am_zp(cpu)
+
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = u16(value) >> 1
+            system_write_byte(system, address, u8(intermediate))
+        case 0x56: // zero page, x
+            address := u16(am_zp_address(cpu))
+
+            cpu.clock += 6
+            cpu.pc += 2
+
+            value := am_zpx(cpu)
+
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = u16(value) >> 1
+            system_write_byte(system, address, u8(intermediate))
+        case 0x4E: // absolute
+            address := am_abs_address(cpu)
+
+            cpu.clock += 6
+            cpu.pc += 3
+
+            value := am_abs(cpu)
+
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = u16(value) >> 1
+            system_write_byte(system, address, u8(intermediate))
+        case 0x5E: // absolute, x
+            address := am_abs_address(cpu)
+
+            cpu.clock += 7
+            cpu.pc += 3
+
+            value := am_absx(cpu, false)
+
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = u16(value) >> 1
+            system_write_byte(system, address, u8(intermediate))
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = false
+    cpu.zero = is_zero(u8(intermediate))
+}
+
+op_ror :: proc(using cpu: ^CPU, opcode: u8) {
+    intermediate: u8
+    switch opcode {
+        case 0x6A: // accumulator
+            cpu.clock += 2
+            cpu.pc += 1
+
+            value := cpu.a
+
+            temp_carry := cpu.carry
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = value >> 1
+            if temp_carry {
+                intermediate |= 0x80
+            }
+            cpu.a = intermediate
+        case 0x66: // zero page
+            address := u16(am_zp_address(cpu))
+
+            cpu.clock += 5
+            cpu.pc += 2
+
+            value := am_zp(cpu)
+
+            temp_carry := cpu.carry
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = value >> 1
+            if temp_carry {
+                intermediate |= 0x80
+            }
+            system_write_byte(system, address, intermediate)
+        case 0x76: // zero page, x
+            address := u16(am_zp_address(cpu))
+
+            cpu.clock += 6
+            cpu.pc += 2
+
+            value := am_zpx(cpu)
+
+            temp_carry := cpu.carry
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = value >> 1
+            if temp_carry {
+                intermediate |= 0x80
+            }
+            system_write_byte(system, address, intermediate)
+        case 0x6E: // absolute
+            address := am_abs_address(cpu)
+
+            cpu.clock += 6
+            cpu.pc += 3
+
+            value := am_abs(cpu)
+
+            temp_carry := cpu.carry
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = value >> 1
+            if temp_carry {
+                intermediate |= 0x80
+            }
+            system_write_byte(system, address, intermediate)
+        case 0x7E: // absolute, x
+            address := am_abs_address(cpu)
+
+            cpu.clock += 7
+            cpu.pc += 3
+
+            value := am_absx(cpu, false)
+
+            temp_carry := cpu.carry
+            cpu.carry = value & 1 == 0 // Set carry flag to the value of the bit that is being shifted out
+
+            intermediate = value >> 1
+            if temp_carry {
+                intermediate |= 0x80
+            }
+            system_write_byte(system, address, intermediate)
+        case:
+            panic("Unknown opcode")
+    }
+
+    // Set flags
+    cpu.negative = is_negative(u8(intermediate))
+    cpu.zero = is_zero(u8(intermediate))
 }
 
 op_lda :: proc(using cpu: ^CPU, opcode: u8) {
@@ -212,8 +1014,8 @@ op_lda :: proc(using cpu: ^CPU, opcode: u8) {
     }
 
     // set flags
-    cpu.negative = intermediate & 0x80 == 0x80
-    cpu.zero = intermediate == 0
+    cpu.negative = is_negative(intermediate)
+    cpu.zero = is_zero(intermediate)
 
     cpu.a = intermediate
 }
@@ -251,8 +1053,8 @@ op_ldx :: proc(using cpu: ^CPU, opcode: u8) {
     }
 
     // set flags
-    cpu.negative = intermediate & 0x80 == 0x80
-    cpu.zero = intermediate == 0
+    cpu.negative = is_negative(intermediate)
+    cpu.zero = is_zero(intermediate)
 
     cpu.x = intermediate
 }
@@ -290,8 +1092,8 @@ op_ldy :: proc (using cpu: ^CPU, opcode: u8) {
     }
 
     // set flags
-    cpu.negative = intermediate & 0x80 == 0x80
-    cpu.zero = intermediate == 0
+    cpu.negative = is_negative(intermediate)
+    cpu.zero = is_zero(intermediate)
 
     cpu.y = intermediate
 }

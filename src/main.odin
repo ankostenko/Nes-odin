@@ -31,7 +31,7 @@ main :: proc() {
     system := init_system()
     cpu := init_cpu(system)
     dump_cpu(cpu)
-    op_ora(&cpu)
+    op_ora(&cpu, 0x09)
     op_lda(&cpu, 0xA9)
     dump_cpu(cpu)
     op_lda(&cpu, 0xA5)

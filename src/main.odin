@@ -30,8 +30,12 @@ main :: proc() {
 
     system := init_system()
     cpu := init_cpu(system)
-
     dump_cpu(cpu)
+    
+    for i := 0; i < 10; i += 1 {
+        run_opcode(&cpu)
+        dump_cpu(cpu)
+    }
 
     // Ignore for now
 

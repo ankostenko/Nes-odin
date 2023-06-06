@@ -1244,7 +1244,6 @@ op_ldx :: proc(using cpu: ^CPU, opcode: u8) {
             
             cpu.clock += 2
             cpu.pc += 2
-        
         case 0xA6: // zero page
             intermediate = am_zp(cpu)
             
@@ -1589,8 +1588,8 @@ _take_branch :: proc(using cpu: ^CPU, arg_address: u16) {
 
     offset := cast(i8)system_read_byte(system, arg_address) // signed offset
 
-    new_address := _calculate_address_for_jump(pc, offset)
-    if _is_page_boundary_crossed(pc, new_address) {
+    new_address := _calculate_address_for_jump(arg_address, offset)
+    if _is_page_boundary_crossed(arg_address, new_address) {
         cpu.clock += 1 // penalty for crossing a page boundary
     }
 

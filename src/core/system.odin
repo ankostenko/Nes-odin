@@ -29,7 +29,13 @@ init_system :: proc() -> System {
 }
 
 mapper_read_byte :: proc(using system: System, address: u16) -> byte {
-    return 0
+    if address >= 0x8000 && address <= 0xBFFF { // PRG-ROM bank 0
+        return cart.prg_rom_pages[0][address - 0x8000]
+    } else if address >= 0xC000 && address <= 0xFFFF {
+        return cart.prg_rom_pages[cart.pgr_rom - 1][address - 0xC000]
+    } else {
+        panic("Invalid mapper read address")
+    }
 }
 
 mapper_write_byte :: proc(using system: System, address: u16, value: u8) {

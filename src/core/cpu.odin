@@ -66,6 +66,126 @@ dump_cpu :: proc(using cpu: CPU) {
     fmt.println()
 }
 
+run_opcode :: proc(using cpu: ^CPU) {
+    opcode := system_read_byte(system, pc)
+    switch opcode {
+        case 0x00:
+            op_brk(cpu)
+        case 0x01, 0x05, 0x09, 0x0D, 0x11, 0x15, 0x19, 0x1D:
+            op_ora(cpu, opcode)
+        case 0x06, 0x0A, 0x0E, 0x16, 0x1E:
+            op_asl(cpu, opcode)
+        case 0x08:
+            op_php(cpu)
+        case 0x0C:
+            op_nop(cpu)
+        case 0x10:
+            op_bpl(cpu)
+        case 0x18:
+            op_clc(cpu)
+        case 0x20:
+            op_jsr(cpu)
+        case 0x21, 0x25, 0x29, 0x2D, 0x31, 0x35, 0x39, 0x3D:
+            op_and(cpu, opcode)
+        case 0x24, 0x2C:
+            op_bit(cpu, opcode)
+        case 0x26, 0x2A, 0x2E, 0x36, 0x3E:
+            op_rol(cpu, opcode)
+        case 0x28:
+            op_plp(cpu)
+        case 0x30:
+            op_bmi(cpu)
+        case 0x38:
+            op_sec(cpu)
+        case 0x40:
+            op_rti(cpu)
+        case 0x41, 0x45, 0x49, 0x4D, 0x51, 0x55, 0x59, 0x5D:
+            op_eor(cpu, opcode)
+        case 0x46, 0x4A, 0x4E, 0x56, 0x5E:
+            op_lsr(cpu, opcode)
+        case 0x48:
+            op_pha(cpu)
+        case 0x4C, 0x6C:
+            op_jmp(cpu, opcode)
+        case 0x50:
+            op_bvc(cpu)
+        case 0x58:
+            op_cli(cpu)
+        case 0x60:
+            op_rts(cpu)
+        case 0x61, 0x65, 0x69, 0x6D, 0x71, 0x75, 0x79, 0x7D:
+            op_adc(cpu, opcode)
+        case 0x66, 0x6A, 0x6E, 0x76, 0x7E:
+            op_ror(cpu, opcode)
+        case 0x68:
+            op_pla(cpu)
+        case 0x70:
+            op_bvs(cpu)
+        case 0xB0:
+            op_bcs(cpu)
+        case 0xD0:
+            op_bne(cpu)
+        case 0xF0:
+            op_beq(cpu)
+        case 0x78:
+            op_sei(cpu)
+        case 0x81, 0x85, 0x8D, 0x91, 0x95, 0x99, 0x9D:
+            op_sta(cpu, opcode)
+        case 0x84, 0x8C, 0x94:
+            op_sty(cpu, opcode)
+        case 0x86, 0x8E, 0x96:
+            op_stx(cpu, opcode)
+        case 0x88:
+            op_dey(cpu)
+        case 0x8A:
+            op_txa(cpu)
+        case 0xAA:
+            op_tax(cpu)
+        case 0xA8:
+            op_tay(cpu)
+        case 0x98:
+            op_tya(cpu)
+        case 0xBA:
+            op_tsx(cpu)
+        case 0x9A:
+            op_txs(cpu)
+        case 0xA0, 0xA4, 0xAC, 0xB4, 0xBC:
+            op_ldy(cpu, opcode)
+        case 0xA1, 0xA5, 0xA9, 0xAD, 0xB1, 0xB5, 0xB9, 0xBD:
+            op_lda(cpu, opcode)
+        case 0xA2, 0xA6, 0xAE, 0xB6, 0xBE:
+            op_ldx(cpu, opcode)
+        case 0xC0, 0xC4, 0xCC:
+            op_cpy(cpu, opcode)
+        case 0xC1, 0xC5, 0xC9, 0xCD, 0xD1, 0xD5, 0xD9, 0xDD:
+            op_cmp(cpu, opcode)
+        case 0xC6, 0xCE, 0xD6, 0xDE:
+            op_dec(cpu, opcode)
+        case 0xCA:
+            op_dex(cpu)
+        case 0xE0, 0xE4, 0xEC:
+            op_cpx(cpu, opcode)
+        case 0xE1, 0xE5, 0xE9, 0xED, 0xF1, 0xF5, 0xF9, 0xFD:
+            op_sbc(cpu, opcode)
+        case 0xE6, 0xEE, 0xF6, 0xFE:
+            op_inc(cpu, opcode)
+        case 0xE8:
+            op_inx(cpu)
+        case 0xC8:
+            op_iny(cpu)
+        case 0xEA:
+            op_nop(cpu)
+        case 0xD8:
+            op_cld(cpu)
+        case 0xF8:
+            op_sed(cpu)
+        case 0xB8:
+            op_clv(cpu)
+        case:
+            panic("Unknown opcode")
+    }
+}
+
 // Returns true if the page boundary is crossed when adding the offset to the address
 _is_page_boundary_crossed_offset :: proc(address: u16, offset: u8) -> bool {
     return (address & 0xff00) != ((address + u16(offset)) & 0xff00)
@@ -1075,9 +1195,7 @@ op_ldy :: proc (using cpu: ^CPU, opcode: u8) {
     cpu.y = intermediate
 }
 
-op_sta :: proc(using cpu: CPU, opcode: u8) -> CPU {
-    cpu := cpu
-
+op_sta :: proc(using cpu: ^CPU, opcode: u8) {
     arg_address := pc + 1 // address of the opcode argument
 
     switch opcode {
@@ -1128,13 +1246,9 @@ op_sta :: proc(using cpu: CPU, opcode: u8) -> CPU {
         case:
             panic("Unknown opcode")
     }
-
-    return cpu
 }
 
-op_stx :: proc(using cpu: CPU, opcode: u8) -> CPU {
-    cpu := cpu
-
+op_stx :: proc(using cpu: ^CPU, opcode: u8) {
     arg_address := pc + 1 // address of the opcode argument
 
     switch opcode {
@@ -1159,13 +1273,9 @@ op_stx :: proc(using cpu: CPU, opcode: u8) -> CPU {
         case:
             panic("Unknown opcode")
     }
-
-    return cpu
 }
 
-op_sty :: proc(using cpu: CPU, opcode: u8) -> CPU {
-    cpu := cpu
-
+op_sty :: proc(using cpu: ^CPU, opcode: u8) {
     arg_address := pc + 1 // address of the opcode argument
 
     switch opcode {
@@ -1190,13 +1300,9 @@ op_sty :: proc(using cpu: CPU, opcode: u8) -> CPU {
         case:
             panic("Unknown opcode")
     }
-
-    return cpu
 }
 
-op_tax :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_tax :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
 
@@ -1205,13 +1311,9 @@ op_tax :: proc(using cpu: CPU) -> CPU {
     cpu.zero = a == 0
 
     cpu.x = a
-
-    return cpu
 }
 
-op_txa :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_txa :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
 
@@ -1220,13 +1322,9 @@ op_txa :: proc(using cpu: CPU) -> CPU {
     cpu.zero = x == 0
 
     cpu.a = x
-
-    return cpu
 }
 
-op_tay :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_tay :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
 
@@ -1235,13 +1333,9 @@ op_tay :: proc(using cpu: CPU) -> CPU {
     cpu.zero = a == 0
 
     cpu.y = a
-
-    return cpu
 }
 
-op_tya :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_tya :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
 
@@ -1250,13 +1344,9 @@ op_tya :: proc(using cpu: CPU) -> CPU {
     cpu.zero = y == 0
 
     cpu.a = y
-
-    return cpu
 }
 
-op_tsx :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_tsx :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
 
@@ -1265,24 +1355,16 @@ op_tsx :: proc(using cpu: CPU) -> CPU {
     cpu.zero = s == 0
 
     cpu.x = s
-
-    return cpu
 }
 
-op_txs :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_txs :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
 
     cpu.s = x
-
-    return cpu
 }
 
-op_pla :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_pla :: proc(using cpu: ^CPU) {
     cpu.clock += 4
     cpu.pc += 1
     
@@ -1296,27 +1378,19 @@ op_pla :: proc(using cpu: CPU) -> CPU {
     cpu.zero = intermediate == 0
 
     cpu.a = intermediate
-
-    return cpu
 }
 
-op_pha :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_pha :: proc(using cpu: ^CPU) {
     cpu.clock += 3
     cpu.pc += 1
 
     system_write_byte(system, STACK_START_ADDR + u16(cpu.s), a)
     cpu.s -= 1
-
-    return cpu
 }
 
-_pull_status_register :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+_pull_status_register :: proc(using cpu: ^CPU) {
     status_register_byte: byte
-    status_register_byte, cpu = _pull_byte_from_stack(cpu)
+    status_register_byte = _pull_byte_from_stack(cpu)
 
     // flags
     cpu.carry     = status_register_byte & 0x01 == 0x01
@@ -1325,61 +1399,41 @@ _pull_status_register :: proc(using cpu: CPU) -> CPU {
     cpu.decimal   = status_register_byte & 0x08 == 0x08
     cpu.overflow  = status_register_byte & 0x40 == 0x40
     cpu.negative  = status_register_byte & 0x80 == 0x80
-
-    return cpu
 }
 
-_pull_byte_from_stack :: proc(using cpu: CPU) -> (u8, CPU) {
-    cpu := cpu
-
+_pull_byte_from_stack :: proc(using cpu: ^CPU) -> u8 {
     cpu.s += 1
     value := system_read_byte(system, STACK_START_ADDR + u16(cpu.s))
 
-    return value, cpu
+    return value
 }
 
-_pull_word_from_stack :: proc(using cpu: CPU) -> (u16, CPU) {
-    cpu := cpu
-
+_pull_word_from_stack :: proc(using cpu: ^CPU) -> u16 {
     cpu.s += 1
     value := system_read_word(system, STACK_START_ADDR + u16(cpu.s))
     cpu.s += 1
 
-    return value, cpu
+    return value
 }
 
-op_plp :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_plp :: proc(using cpu: ^CPU) {
     cpu.clock += 4
     cpu.pc += 1
 
-    cpu = _pull_status_register(cpu)
-
-    return cpu
+    _pull_status_register(cpu)
 }
 
-_push_byte_to_stack :: proc(using cpu: CPU, value: u8) -> CPU {
-    cpu := cpu
-
+_push_byte_to_stack :: proc(using cpu: ^CPU, value: u8) {
     system_write_byte(system, STACK_START_ADDR + u16(cpu.s), value)
     cpu.s -= 1
-
-    return cpu
 }
 
-_push_word_to_stack :: proc(using cpu: CPU, value: u16) -> CPU {
-    cpu := cpu
-
-    cpu = _push_byte_to_stack(cpu, cast(u8)(value >> 8))
-    cpu = _push_byte_to_stack(cpu, cast(u8)(value & 0xFF))
-
-    return cpu
+_push_word_to_stack :: proc(using cpu: ^CPU, value: u16) {
+    _push_byte_to_stack(cpu, cast(u8)(value >> 8))
+    _push_byte_to_stack(cpu, cast(u8)(value & 0xFF))
 }
 
-_push_status_register :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+_push_status_register :: proc(using cpu: ^CPU) {
     status_register_byte: u8 = 0
 
     status_register_byte |= 0x01 if cpu.carry      else 0
@@ -1391,20 +1445,14 @@ _push_status_register :: proc(using cpu: CPU) -> CPU {
     status_register_byte |= 0x40 if cpu.overflow   else 0
     status_register_byte |= 0x80 if cpu.negative   else 0
 
-    cpu = _push_byte_to_stack(cpu, status_register_byte)
-
-    return cpu
+    _push_byte_to_stack(cpu, status_register_byte)
 }
 
-op_php :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_php :: proc(using cpu: ^CPU) {
     cpu.clock += 3
     cpu.pc += 1
 
-    cpu = _push_status_register(cpu)
-
-    return cpu
+    _push_status_register(cpu)
 }
 
 _calculate_address_for_jump :: proc(address: u16, offset: i8) -> u16 {
@@ -1416,9 +1464,7 @@ _calculate_address_for_jump :: proc(address: u16, offset: i8) -> u16 {
 }
 
 // TODO: test this
-_take_branch :: proc(using cpu: CPU, arg_address: u16) -> CPU {
-    cpu := cpu
-
+_take_branch :: proc(using cpu: ^CPU, arg_address: u16) {
     cpu.clock += 1 // penalty for taking the branch
 
     offset := cast(i8)system_read_byte(system, arg_address) // signed offset
@@ -1429,151 +1475,121 @@ _take_branch :: proc(using cpu: CPU, arg_address: u16) -> CPU {
     }
 
     cpu.pc = new_address
-
-    return cpu
 }
 
 // TODO: test this
-op_bpl :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if plus
+op_bpl :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     cpu.clock += 2
 
     if !cpu.negative {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-    return cpu
 }
 
 // TODO: test this
-op_bmi :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_bmi :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if cpu.negative {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
-op_bvc :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if overflow clear
+op_bvc :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if !cpu.overflow {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
-op_bvs :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if overflow set
+op_bvs :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if cpu.overflow {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
-op_bcc :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if carry clear
+op_bcc :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if !cpu.carry {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
 // TODO: test this
-op_bcs :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if carry set
+op_bcs :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if cpu.carry {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
 // TODO: test this
-op_bne :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if not equal
+op_bne :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if !cpu.zero {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
 // TODO: test this
-op_beq :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Branch if equal
+op_beq :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     if cpu.zero {
-        cpu = _take_branch(cpu, arg_address)
+        _take_branch(cpu, arg_address)
     } else {
         cpu.pc += 2
     }
-
-    return cpu
 }
 
 // TODO: test this
-op_brk :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Break
+op_brk :: proc(using cpu: ^CPU) {
     cpu.clock += 7
 
     // Push the PC to the stack
-    cpu = _push_word_to_stack(cpu, cpu.pc)
+    _push_word_to_stack(cpu, cpu.pc)
 
-    cpu = _push_status_register(cpu)
+    _push_status_register(cpu)
 
     cpu.pc = system_read_word(system, IRQ_VECTOR_ADDR)
 
     // set the break flag
     cpu.break_flag = true
     cpu.interrupt = true
-
-    return cpu
 }
 
-op_rti :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Return from interrupt
+op_rti :: proc(using cpu: ^CPU) {
     cpu.clock += 6
 
     // [| |P|PC1|PC2|X|X|X|]
@@ -1589,46 +1605,33 @@ op_rti :: proc(using cpu: CPU) -> CPU {
     //           s^
     // We have to point to the first free byte on the stack
 
-    cpu = _pull_status_register(cpu)
-    pulled_pc: u16
-    pulled_pc, cpu = _pull_word_from_stack(cpu)
-    cpu.pc = pulled_pc
-
-    return cpu
+    _pull_status_register(cpu)
+    cpu.pc = _pull_word_from_stack(cpu)
 }
 
-op_jsr :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
 
+// Jump to subroutine
+op_jsr :: proc(using cpu: ^CPU) {
     arg_address := pc + 1 // address of the opcode argument
 
     cpu.clock += 6
 
     // Push the PC + 2 (the next operation) to the stack
-    cpu = _push_word_to_stack(cpu, cpu.pc + 2)
+    _push_word_to_stack(cpu, cpu.pc + 2)
 
     // Jump to the address, absolute addressing mode
     cpu.pc = system_read_word(system, arg_address)
-
-    return cpu
 }
 
-op_rts :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+// Return from subroutine
+op_rts :: proc(using cpu: ^CPU) {
     cpu.clock += 6
 
     // Read the PC from the stack
-    pulled_pc: u16
-    pulled_pc, cpu = _pull_word_from_stack(cpu)
-    cpu.pc = pulled_pc
-
-    return cpu
+    cpu.pc = _pull_word_from_stack(cpu)
 }
 
-op_jmp :: proc(using cpu: CPU, opcode: u8) -> CPU {
-    cpu := cpu
-
+op_jmp :: proc(using cpu: ^CPU, opcode: u8) {
     switch opcode {
         case 0x4C: // JMP absolute
             arg_address := pc + 1 // address of the opcode argument
@@ -1644,13 +1647,9 @@ op_jmp :: proc(using cpu: CPU, opcode: u8) -> CPU {
     }
 
     cpu.pc += 3
-    
-    return cpu
 }
 
-op_bit :: proc(using cpu: CPU, opcode: u8) -> CPU {
-    cpu := cpu
-    
+op_bit :: proc(using cpu: ^CPU, opcode: u8) {
     arg_address := pc + 1 // address of the opcode argument
     value: u8
 
@@ -1675,94 +1674,60 @@ op_bit :: proc(using cpu: CPU, opcode: u8) -> CPU {
     cpu.negative = (value & 0x80) != 0 // set the negative flag to the 7th bit of the memory
     cpu.overflow = (value & 0x40) != 0 // set the overflow flag to the 6th bit of the memory
     cpu.zero     = (value & a)    == 0 // set the zero flag to the result of the AND operation between the accumulator and the memory
-
-    return cpu
 }
 
 
 // Reset the carry flag
-op_clc :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_clc :: proc(using cpu: ^CPU) {
     cpu.carry = false
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_sec :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_sec :: proc(using cpu: ^CPU) {
     cpu.carry = true
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_cld :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_cld :: proc(using cpu: ^CPU) {
     cpu.decimal = false
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_sed :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_sed :: proc(using cpu: ^CPU) {
     cpu.decimal = true
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_cli :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_cli :: proc(using cpu: ^CPU) {
     cpu.interrupt = false
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_sei :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_sei :: proc(using cpu: ^CPU) {
     cpu.interrupt = true
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_clv :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_clv :: proc(using cpu: ^CPU) {
     cpu.overflow = false
 
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }
 
-op_nop :: proc(using cpu: CPU) -> CPU {
-    cpu := cpu
-
+op_nop :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
-
-    return cpu
 }

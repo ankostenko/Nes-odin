@@ -50,7 +50,7 @@ init_cpu :: proc(system: System) -> CPU {
 }
 
 dump_cpu :: proc(using cpu: CPU) {
-    fmt.printf("a: %X, x: %X, y: %X, s: %X, pc: %X, clock: %d | flags: ", a, x, y, s, pc, clock)
+    fmt.printf("%8X> a: %4X x: %4X y: %4X s: %4X clk: %8d | ", pc, a, x, y, s, clock)
     
     cpu_type_id := typeid_of(CPU)
     types := reflect.struct_field_types(cpu_type_id)
@@ -63,7 +63,6 @@ dump_cpu :: proc(using cpu: CPU) {
             }   
         }
     }
-    fmt.println()
 }
 
 opcode_to_mnemonic :: proc(opcode: u8) -> string {
@@ -185,9 +184,56 @@ opcode_to_mnemonic :: proc(opcode: u8) -> string {
     }
 }
 
+// Returns an argument of the given opcode depending on the addressing mode
+opcode_argument :: proc(using cpu: ^CPU, opcode: u8) -> string {
+    argument: string
+    switch opcode {
+        // All instruction with immediate addressing mode
+        case 0x09, 0x29, 0x49, 0x69, 0x0A, 0x2A, 0x4A, 0x6A, 0xC9, 0xE9, 0xC0, 0xE0, 0xA9, 0xA2, 0xA0:
+            argument = fmt.tprintf("#$%02X", am_imm(cpu))
+        // All instructions with zero page addressing mode
+        case 0x05, 0x25, 0x45, 0x65, 0x85, 0xA5, 0xC5, 0xE5, 0x06, 0x26, 0x46, 0x66, 0xC6, 0xE6, 0xA6, 0x24, 0xC4, 0xE4, 0xA4, 0x84:
+            argument = fmt.tprintf("$%02X", am_zp_address(cpu))
+        // All instructions with zero page, x addressing mode
+        case 0x15, 0x35, 0x55, 0x75, 0x95, 0xB5, 0xD5, 0xF5, 0x16, 0x36, 0x56, 0x76, 0xD6, 0xF6, 0xB4, 0x94:
+            argument = fmt.tprintf("$%02X,X", am_zp_address(cpu))
+        // All instructions with zero page, y addressing mode
+        case 0x96, 0xB6:
+            argument = fmt.tprintf("$%02X,Y", am_zp_address(cpu))
+        // All instructions with absolute addressing mode
+        case 0x0D, 0x2D, 0x4D, 0x6D, 0x8D, 0xAD, 0xCD, 0xED, 0x0E, 0x2E, 0x4E, 0x6E, 0x8E, 0xAE, 0xCE, 0xEE, 0xAC, 0xCC, 0xEC, 0xBC:
+            argument = fmt.tprintf("$%04X", am_abs_address(cpu))
+        // All instructions with absolute, x addressing mode
+        case 0x1D, 0x3D, 0x5D, 0x7D, 0x9D, 0xBD, 0xDD, 0xFD, 0x1E, 0x3E, 0x5E, 0x7E, 0x9E, 0xBE, 0xDE, 0xFE:
+            argument = fmt.tprintf("$%04X,X", am_abs_address(cpu))
+        // All instructions with absolute, y addressing mode
+        case 0x19, 0x39, 0x59, 0x79, 0x99, 0xB9, 0xD9, 0xF9:
+            argument = fmt.tprintf("$%04X,Y", am_abs_address(cpu))
+        // All instructions with indirect zero page, x addressing mode
+        case 0x01, 0x21, 0x41, 0x61, 0x81, 0xA1, 0xC1, 0xE1:
+            argument = fmt.tprintf("($%02X,X)", am_zp_address(cpu))
+        // All instructions with indirect zero page, y addressing mode
+        case 0x11, 0x31, 0x51, 0x71, 0x91, 0xB1, 0xD1, 0xF1:
+            argument = fmt.tprintf("($%02X),Y", am_zp_address(cpu))
+        case 0x10, 0x30, 0x50, 0x70, 0x90, 0xB0, 0xD0, 0xF0: // Branches
+            offset := am_imm(cpu) // Even though it is relative addressing mode, the argument is an immediate value
+            argument = fmt.tprintf("$%04X", _calculate_address_for_jump(pc + 2, i8(offset)))
+        case:
+            argument = ""
+    }
+
+    // Post processing an argument to replace it with known addresses if possible
+    if argument == "$2002" {
+        return "$2002 (PPUSTATUS)"
+    }
+
+    return argument
+}
+
 run_opcode :: proc(using cpu: ^CPU) {
     opcode := system_read_byte(system, pc)
-    fmt.printf("Opcode: %X %q | ", opcode, opcode_to_mnemonic(opcode))
+    argument := system_read_byte(system, pc + 1)
+    fmt.printf("| %X %s %s\n", opcode, opcode_to_mnemonic(opcode), opcode_argument(cpu, opcode))
     switch opcode {
         case 0x00:
             op_brk(cpu)
@@ -1476,6 +1522,7 @@ op_tsx :: proc(using cpu: ^CPU) {
     cpu.x = s
 }
 
+// Loads the X register to the stack pointer
 op_txs :: proc(using cpu: ^CPU) {
     cpu.clock += 2
     cpu.pc += 1
@@ -1588,8 +1635,8 @@ _take_branch :: proc(using cpu: ^CPU, arg_address: u16) {
 
     offset := cast(i8)system_read_byte(system, arg_address) // signed offset
 
-    new_address := _calculate_address_for_jump(arg_address, offset)
-    if _is_page_boundary_crossed(arg_address, new_address) {
+    new_address := _calculate_address_for_jump(arg_address + 1, offset)
+    if _is_page_boundary_crossed(arg_address + 1, new_address) {
         cpu.clock += 1 // penalty for crossing a page boundary
     }
 

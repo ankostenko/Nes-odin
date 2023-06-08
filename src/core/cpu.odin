@@ -225,6 +225,22 @@ opcode_argument :: proc(using cpu: ^CPU, opcode: u8) -> string {
     // Post processing an argument to replace it with known addresses if possible
     if argument == "$2002" {
         return "$2002 (PPUSTATUS)"
+    } else if argument == "$2000" {
+        return "$2000 (PPUCTRL)"
+    } else if argument == "$2001" {
+        return "$2001 (PPUMASK)"
+    } else if argument == "$2003" {
+        return "$2003 (OAMADDR)"
+    } else if argument == "$2004" {
+        return "$2004 (OAMDATA)"
+    } else if argument == "$2005" {
+        return "$2005 (PPUSCROLL)"
+    } else if argument == "$2006" {
+        return "$2006 (PPUADDR)"
+    } else if argument == "$2007" {
+        return "$2007 (PPUDATA)"
+    } else if argument == "$4014" {
+        return "$4014 (OAMDMA)"
     }
 
     return argument

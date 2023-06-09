@@ -2,6 +2,7 @@ package main
 
 // Core imports
 import "core:fmt"
+import "core:time"
 import "nes:core"
 
 // Vendor imports
@@ -24,16 +25,25 @@ main :: proc() {
     using core
 
     // Check arguments
-    if check_arguments() != .None {
+    number_of_opcodes_to_run, error := check_arguments()
+    if error != .None {
         return
     }
 
     system := init_system()
-    cpu := init_cpu(system)
-    for i := 0; i < 100; i += 1 {
+    cpu := init_cpu(&system)
+    start := time.now() // Start the timer
+    for i:u64 = 0; i < number_of_opcodes_to_run; i += 1 {
         dump_cpu(cpu)
+        cpu_clock_cycles_before := cpu.clock
         run_opcode(&cpu)
+        cpu_clock_cycles_after := cpu.clock
+        ppu_tick(&system.ppu, (cpu_clock_cycles_after - cpu_clock_cycles_before) * 3)
     }
+    end := time.now() // Stop the timer
+
+    // Print the time it took to run the opcodes
+    fmt.println("Ran", number_of_opcodes_to_run, "opcodes in", time.duration_milliseconds(time.diff(start, end)), "milliseconds")
 
     // Ignore for now
 

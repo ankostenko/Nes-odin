@@ -25,11 +25,11 @@ CPU :: struct {
     interrupt: bool // interrupt flag
     zero: bool // zero flag
     carry: bool // carry flag
-    system: System // system
+    system: ^System // system
     clock: u64 // clock cycles
 }
 
-init_cpu :: proc(system: System) -> CPU {
+init_cpu :: proc(system: ^System) -> CPU {
     reset_vector := system_read_word(system, RESET_VECTOR_ADDR)
     return CPU {
         negative=false
@@ -50,7 +50,7 @@ init_cpu :: proc(system: System) -> CPU {
 }
 
 dump_cpu :: proc(using cpu: CPU) {
-    fmt.printf("%8X> a: %4X x: %4X y: %4X s: %4X clk: %8d | ", pc, a, x, y, s, clock)
+    fmt.printf("%4X> a: %2X x: %2X y: %2X s: %2X clk: %8d ppu_clk: %8d | ", pc, a, x, y, s, clock, system.ppu.clock)
     
     cpu_type_id := typeid_of(CPU)
     types := reflect.struct_field_types(cpu_type_id)
@@ -201,7 +201,7 @@ opcode_argument :: proc(using cpu: ^CPU, opcode: u8) -> string {
         case 0x96, 0xB6:
             argument = fmt.tprintf("$%02X,Y", am_zp_address(cpu))
         // All instructions with absolute addressing mode
-        case 0x0D, 0x2D, 0x4D, 0x6D, 0x8D, 0xAD, 0xCD, 0xED, 0x0E, 0x2E, 0x4E, 0x6E, 0x8E, 0xAE, 0xCE, 0xEE, 0xAC, 0xCC, 0xEC, 0xBC:
+        case 0x20, 0x0D, 0x2D, 0x4D, 0x6D, 0x8D, 0xAD, 0xCD, 0xED, 0x0E, 0x2E, 0x4E, 0x6E, 0x8E, 0xAE, 0xCE, 0xEE, 0xAC, 0xCC, 0xEC, 0xBC:
             argument = fmt.tprintf("$%04X", am_abs_address(cpu))
         // All instructions with absolute, x addressing mode
         case 0x1D, 0x3D, 0x5D, 0x7D, 0x9D, 0xBD, 0xDD, 0xFD, 0x1E, 0x3E, 0x5E, 0x7E, 0x9E, 0xBE, 0xDE, 0xFE:
@@ -364,7 +364,8 @@ run_opcode :: proc(using cpu: ^CPU) {
         case 0xB8:
             op_clv(cpu)
         case:
-            panic("Unknown opcode")
+            // panic("Unknown opcode")
+            op_nop(cpu)
     }
 }
 
@@ -1799,8 +1800,9 @@ op_jsr :: proc(using cpu: ^CPU) {
 
     cpu.clock += 6
 
-    // Push the PC + 2 (the next operation) to the stack
-    _push_word_to_stack(cpu, cpu.pc + 2)
+    // Push the PC + 3 (the next operation) to the stack, skip the 
+    // opcode (1 byte) and the argument (2 bytes) 
+    _push_word_to_stack(cpu, pc + 1 + 2)
 
     // Jump to the address, absolute addressing mode
     cpu.pc = system_read_word(system, arg_address)

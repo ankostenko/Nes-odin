@@ -28,7 +28,7 @@ init_system :: proc() -> System {
     }
 }
 
-mapper_read_byte :: proc(using system: System, address: u16) -> byte {
+mapper_read_byte :: proc(using system: ^System, address: u16) -> byte {
     if address >= 0x8000 && address <= 0xBFFF { // PRG-ROM bank 0
         return cart.prg_rom_pages[0][address - 0x8000]
     } else if address >= 0xC000 && address <= 0xFFFF {
@@ -38,14 +38,14 @@ mapper_read_byte :: proc(using system: System, address: u16) -> byte {
     }
 }
 
-mapper_write_byte :: proc(using system: System, address: u16, value: u8) {
+mapper_write_byte :: proc(using system: ^System, address: u16, value: u8) {
 }
 
-system_read_word :: proc(using system: System, address: u16) -> u16 {
+system_read_word :: proc(system: ^System, address: u16) -> u16 {
     return (cast(u16)system_read_byte(system, address)) | ((cast(u16)system_read_byte(system, address + 1)) << 8)
 }
 
-system_read_byte :: proc(using system: System, address: u16) -> byte {
+system_read_byte :: proc(using system: ^System, address: u16) -> byte {
     // We're in the scratch RAM
     if address < 0x2000 {
         // Up until 0x7FF, it's mirrored every 0x800 bytes (0x800, 0x1000, etc). 
@@ -53,7 +53,7 @@ system_read_byte :: proc(using system: System, address: u16) -> byte {
         return scratch_ram[address & 0x7FF]
     } else if address < 0x4000 {
         // PPU registers
-        return read_ppu_address(ppu, address)
+        return read_ppu_address(&ppu, address)
     } else if address < 0x4020 {
         // APU registers
         return read_apu_address(apu, address)
@@ -64,7 +64,7 @@ system_read_byte :: proc(using system: System, address: u16) -> byte {
     return 0
 }
 
-system_write_byte :: proc(using system: System, address: u16, value: u8) {
+system_write_byte :: proc(using system: ^System, address: u16, value: u8) {
     // We're in the scratch RAM
     if address < 0x2000 {
         scratch_ram[address & 0x7FF] = value

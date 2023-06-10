@@ -34,7 +34,7 @@ main :: proc() {
     cpu := init_cpu(&system)
     start := time.now() // Start the timer
     for i:u64 = 0; i < number_of_opcodes_to_run; i += 1 {
-        dump_cpu(cpu)
+        dump_cpu(&cpu)
         cpu_clock_cycles_before := cpu.clock
         run_opcode(&cpu)
         cpu_clock_cycles_after := cpu.clock

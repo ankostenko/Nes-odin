@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:reflect"
 import "core:strings"
 import "core:math"
+import "core:strconv"
 
 // Reset vector is hardwired to 0xfffc-0xfffd
 RESET_VECTOR_ADDR :: 0xfffc
@@ -49,20 +50,22 @@ init_cpu :: proc(system: ^System) -> CPU {
     }
 }
 
-dump_cpu :: proc(using cpu: CPU) {
+print_flags :: proc(using cpu: ^CPU) {
+    builder := strings.builder_make_len(14) // "- - - - - - - "
+    defer strings.builder_destroy(&builder)
+    strings.write_string(&builder, "N " if negative else "- ")
+    strings.write_string(&builder, "V " if overflow else "- ")
+    strings.write_string(&builder, "B " if break_flag else "- ")
+    strings.write_string(&builder, "D " if decimal else "- ")
+    strings.write_string(&builder, "I " if interrupt else "- ")
+    strings.write_string(&builder, "Z " if zero else "- ")
+    strings.write_string(&builder, "C " if carry else "- ")
+    fmt.print(strings.to_string(builder))
+}
+
+dump_cpu :: proc(using cpu: ^CPU) {
     fmt.printf("%4X> a: %2X x: %2X y: %2X s: %2X clk: %8d ppu_clk: %8d | ", pc, a, x, y, s, clock, system.ppu.clock)
-    
-    cpu_type_id := typeid_of(CPU)
-    types := reflect.struct_field_types(cpu_type_id)
-    for name, i in reflect.struct_field_names(cpu_type_id) {
-        if reflect.is_boolean(types[i]) {
-            if (cast(^bool)reflect.struct_field_value_by_name(cpu, name).data)^ {
-                fmt.printf("%r ", 'V' if name == "overflow" else strings.to_upper(name)[0])
-            } else {
-                fmt.printf("- ")
-            }   
-        }
-    }
+    print_flags(cpu)
 }
 
 opcode_to_mnemonic :: proc(opcode: u8) -> string {

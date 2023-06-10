@@ -50,7 +50,7 @@ init_cpu :: proc(system: ^System) -> CPU {
     }
 }
 
-print_flags :: proc(using cpu: ^CPU) {
+_print_flags :: proc(using cpu: ^CPU) {
     builder := strings.builder_make_len(14) // "- - - - - - - "
     defer strings.builder_destroy(&builder)
     strings.write_string(&builder, "N " if negative else "- ")
@@ -63,9 +63,15 @@ print_flags :: proc(using cpu: ^CPU) {
     fmt.print(strings.to_string(builder))
 }
 
+_print_cpu_state :: proc(using cpu: ^CPU) {
+    builder := strings.builder_make_len(64) //
+    defer strings.builder_destroy(&builder)
+    fmt.print(fmt.sbprintf(&builder, "%4X> a: %2X x: %2X y: %2X s: %2X clk: %8d ppu_clk: %8d | ", pc, a, x, y, s, clock, system.ppu.clock))
+}
+
 dump_cpu :: proc(using cpu: ^CPU) {
-    fmt.printf("%4X> a: %2X x: %2X y: %2X s: %2X clk: %8d ppu_clk: %8d | ", pc, a, x, y, s, clock, system.ppu.clock)
-    print_flags(cpu)
+    _print_cpu_state(cpu)
+    _print_flags(cpu)
 }
 
 opcode_to_mnemonic :: proc(opcode: u8) -> string {

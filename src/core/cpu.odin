@@ -50,28 +50,23 @@ init_cpu :: proc(system: ^System) -> CPU {
     }
 }
 
-_print_flags :: proc(using cpu: ^CPU) {
-    builder := strings.builder_make_len(14) // "- - - - - - - "
-    defer strings.builder_destroy(&builder)
-    strings.write_string(&builder, "N " if negative else "- ")
-    strings.write_string(&builder, "V " if overflow else "- ")
-    strings.write_string(&builder, "B " if break_flag else "- ")
-    strings.write_string(&builder, "D " if decimal else "- ")
-    strings.write_string(&builder, "I " if interrupt else "- ")
-    strings.write_string(&builder, "Z " if zero else "- ")
-    strings.write_string(&builder, "C " if carry else "- ")
-    fmt.print(strings.to_string(builder))
+_make_flags_string :: proc(using cpu: ^CPU) -> string {
+    return fmt.tprintf("%s%s%s%s%s%s%s",
+                    "N " if negative else "- ",
+                    "V " if overflow else "- ",
+                    "B " if break_flag else "- ",
+                    "D " if decimal else "- ",
+                    "I " if interrupt else "- ",
+                    "Z " if zero else "- ",
+                    "C " if carry else "- ")
 }
 
-_print_cpu_state :: proc(using cpu: ^CPU) {
-    builder := strings.builder_make_len(64) //
-    defer strings.builder_destroy(&builder)
-    fmt.print(fmt.sbprintf(&builder, "%4X> a: %2X x: %2X y: %2X s: %2X clk: %8d ppu_clk: %8d | ", pc, a, x, y, s, clock, system.ppu.clock))
+_make_cpu_state_string :: proc(using cpu: ^CPU) -> string {
+    return fmt.tprintf("%4X> a: %2X x: %2X y: %2X s: %2X clk: %8d ppu_clk: %8d | ", pc, a, x, y, s, clock, system.ppu.clock)
 }
 
 dump_cpu :: proc(using cpu: ^CPU) {
-    _print_cpu_state(cpu)
-    _print_flags(cpu)
+    fmt.print(fmt.tprintf("%s%s", _make_cpu_state_string(cpu), _make_flags_string(cpu)))
 }
 
 opcode_to_mnemonic :: proc(opcode: u8) -> string {
@@ -258,7 +253,7 @@ opcode_argument :: proc(using cpu: ^CPU, opcode: u8) -> string {
 run_opcode :: proc(using cpu: ^CPU) {
     opcode := system_read_byte(system, pc)
     argument := system_read_byte(system, pc + 1)
-    fmt.printf("| %X %s %s\n", opcode, opcode_to_mnemonic(opcode), opcode_argument(cpu, opcode))
+    fmt.print(fmt.tprintf("| %X %s %s\n", opcode, opcode_to_mnemonic(opcode), opcode_argument(cpu, opcode)))
     switch opcode {
         case 0x00:
             op_brk(cpu)

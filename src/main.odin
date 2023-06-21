@@ -2,6 +2,8 @@ package main
 
 // Core imports
 import "core:fmt"
+import "core:io"
+import "core:os"
 import "core:time"
 import "nes:core"
 
@@ -33,12 +35,30 @@ main :: proc() {
     system := init_system()
     cpu := init_cpu(&system)
     start := time.now() // Start the timer
+    input := make([]byte, 512)
     for i:u64 = 0; i < number_of_opcodes_to_run; i += 1 {
+        // s := os.stream_from_handle(os.stdin)
+        // if reader, ok := io.to_reader(s); ok {
+        //     io.read(reader, input)
+        //     if fmt.tprintf("%s", input) == "s" {
+        //         break
+        //     }
+        // }
         dump_cpu(&cpu)
+     
+        nmi_before := cpu.system.ppu.nmi_on_vblank
+
         cpu_clock_cycles_before := cpu.clock
         run_opcode(&cpu)
         cpu_clock_cycles_after := cpu.clock
+
+        ppu := &cpu.system.ppu
         ppu_tick(&system.ppu, (cpu_clock_cycles_after - cpu_clock_cycles_before) * 3)
+        nmi_after := cpu.system.ppu.nmi_on_vblank
+    
+        if nmi_before != nmi_after && ppu.nmi_on_vblank {
+            cpu_nmi(&cpu)
+        }
     }
     end := time.now() // Stop the timer
 

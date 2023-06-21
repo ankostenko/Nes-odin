@@ -70,7 +70,7 @@ system_write_byte :: proc(using system: ^System, address: u16, value: u8) {
         scratch_ram[address & 0x7FF] = value
     } else if address < 0x4000 {
         // PPU registers
-        write_ppu_address(ppu, address, value)
+        write_ppu_address(&ppu, address, value)
     } else if address < 0x4020 {
         // APU registers
         write_apu_address(apu, address, value)

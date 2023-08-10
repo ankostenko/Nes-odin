@@ -18,10 +18,12 @@ _make_cpu_state_string :: proc(using cpu: ^CPU) -> string {
 }
 
 _make_ppu_state_string :: proc(using cpu: ^CPU) -> string {
-    return fmt.tprintf("v: %5t nmi: %5t bta: %4X ppuctrl: %2x ",
+    return fmt.tprintf("v: %5t nmi: %5t bta: %4X vp: %3d hp: %3d ppuctrl: %2x ",
                         system.ppu.in_vblank,
                         system.ppu.nmi_on_vblank,
                         system.ppu.base_table_address,
+                        system.ppu.clock / 341,
+                        system.ppu.clock % 341,
                         system_read_byte(system, 0x2000))
 }
 

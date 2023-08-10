@@ -60,10 +60,15 @@ cpu_nmi :: proc(using cpu: ^CPU) {
    cpu.pc = interrupt_vector
 }
 
-run_opcode :: proc(using cpu: ^CPU) {
+print_current_opcode :: proc(using cpu: ^CPU) {
     opcode := system_read_byte(system, pc)
     argument := system_read_byte(system, pc + 1)
     fmt.print(fmt.tprintf("| %X %s %s\n", opcode, opcode_to_mnemonic(opcode), opcode_argument(cpu, opcode)))
+}
+
+run_opcode :: proc(using cpu: ^CPU) {
+    opcode := system_read_byte(system, pc)
+    print_current_opcode(cpu)
     switch opcode {
         case 0x00:
             op_brk(cpu)

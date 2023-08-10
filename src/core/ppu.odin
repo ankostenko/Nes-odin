@@ -3,6 +3,8 @@ package core
 PPU :: struct {
     clock: u64
     in_vblank: bool
+    
+    // Control register
     base_table_address: u16
     vram_address_inc: u16
     sprite_pattern_table_address: u16
@@ -13,6 +15,15 @@ PPU :: struct {
         OUTPUT_COLOR_ON_EXT_PINS
     }
     nmi_on_vblank: bool
+
+    // Address register
+    vram_address: u16
+
+
+    dont_vblank: bool
+    
+    // Internal registers
+    _first_write_toggle: bool
 }
 
 init_ppu :: proc() -> PPU {
@@ -23,13 +34,31 @@ init_ppu :: proc() -> PPU {
 }
 
 ppu_tick :: proc(using ppu: ^PPU, cycles: u64) {
-    ppu.clock += cycles
+    for i in 0..<cycles {
+        horizontal_pixel := clock % 341
+        vertical_pixel := clock / 341
 
-    clock_in_current_frame := clock % (341 * 262)
-    if clock_in_current_frame > (341 * 241) && !in_vblank {
-        ppu.in_vblank = true
-    } else if clock_in_current_frame <= (341 * 241) && in_vblank {
-        ppu.in_vblank = false
+        ppu.clock += 1
+
+        if vertical_pixel == 241 && horizontal_pixel == 0 {
+            dont_vblank = false
+        }
+
+        if vertical_pixel == 241 && horizontal_pixel == 1 && !dont_vblank {
+            ppu.in_vblank = true
+        }
+        
+        if vertical_pixel == 261 && horizontal_pixel == 1 {
+            ppu.in_vblank = false
+        }
+        
+        if vertical_pixel == 261 && horizontal_pixel == 3 {
+            dont_vblank = false
+        }
+
+        if horizontal_pixel == 340 && vertical_pixel == 261 { 
+            ppu.clock = 0
+        }
     }
 }
 
@@ -57,6 +86,13 @@ ppu_status :: proc(using ppu: ^PPU) -> u8 {
 
     if in_vblank {
         status |= 0x80
+    }
+
+    horizontal_pixel := clock % 341
+    vertical_pixel := clock / 341
+
+    if vertical_pixel == 241 && (horizontal_pixel >= 1 || horizontal_pixel <= 3) {
+        ppu.dont_vblank = true
     }
 
     ppu.in_vblank = false
@@ -139,18 +175,28 @@ ppu_ctrl :: proc(using ppu: ^PPU, value: u8) {
             master_slave_select = .OUTPUT_COLOR_ON_EXT_PINS
     }
 
+    // Generate an NMI at the start of the vertical blanking interval
     switch value & 0x80 {
         case 0:
-            // Generate an NMI at the start of the vertical blanking interval
             nmi_on_vblank = false
         case 1:
-            // Generate an NMI at the start of the vertical blanking interval
             nmi_on_vblank = true
     }
 }
 
 ppu_mask :: proc(using ppu: ^PPU, value: u8) {
 
+}
+
+// Write to PPU_ADDRESS($2006) first writes upper byte, then lower byte
+ppu_address :: proc(using ppu: ^PPU, value: u8) {
+    if _first_write_toggle {
+        ppu.vram_address = vram_address | u16(value << 8)
+        _first_write_toggle = false
+    } else {
+        ppu.vram_address = vram_address | u16(value)
+        _first_write_toggle = true
+    }
 }
 
 read_ppu_address :: proc(using ppu: ^PPU, address: u16) -> u8 {
@@ -166,6 +212,10 @@ write_ppu_address :: proc(using ppu: ^PPU, address: u16, value: u8) {
     switch address {
         case 0x2000:
             ppu_ctrl(ppu, value)
+        case 0x2001:
+            ppu_mask(ppu, value)
+        case 0x2006:
+            ppu_address(ppu, value)
         case:
             return
     }
